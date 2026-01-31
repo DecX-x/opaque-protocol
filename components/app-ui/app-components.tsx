@@ -55,12 +55,12 @@ export function Navbar() {
           >
             Portfolio
           </Link>
-          <a
-            href="#"
+          <Link
+            href="/app/history"
             className="text-slate-500 hover:text-[var(--primary)] transition-colors"
           >
-            Darkpool Stats
-          </a>
+            History
+          </Link>
           <a
             href="#"
             className="text-slate-500 hover:text-[var(--primary)] transition-colors"
