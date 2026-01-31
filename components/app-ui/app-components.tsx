@@ -32,15 +32,18 @@ export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <nav className="fixed top-0 w-full z-50 px-6 py-4 pointer-events-none">
-      <div className="max-w-7xl mx-auto glass rounded-2xl px-6 py-3 shadow-sm pointer-events-auto relative">
+    <nav className="fixed top-0 w-full z-50 px-4 sm:px-6 py-2 sm:py-4 pointer-events-none">
+      <div className="max-w-7xl mx-auto glass rounded-2xl px-4 py-3 shadow-sm pointer-events-auto relative">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-sm">
-              <Icon name="blur_on" className="text-white" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-sm shrink-0">
+              <Icon name="blur_on" className="text-white text-xl sm:text-2xl" />
             </div>
-            <span className="text-xl font-bold tracking-tight">
-              OPAQUE <span className="text-slate-400 font-medium hidden sm:inline">TERMINAL</span>
+            <span className="text-lg sm:text-xl font-bold tracking-tight">
+              OPAQUE{" "}
+              <span className="text-slate-400 font-medium hidden sm:inline">
+                TERMINAL
+              </span>
             </span>
           </div>
 
@@ -71,14 +74,17 @@ export function Navbar() {
             </a>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsConnected(!isConnected)}
               className="bg-[var(--primary)] text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:shadow-pink-300 transition-all active:scale-95 flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
             >
-              <Icon name="account_balance_wallet" className="text-base sm:text-lg" />
+              <Icon
+                name="account_balance_wallet"
+                className="text-base sm:text-lg"
+              />
               {isConnected ? "0x82...39a1" : "Connect"}
             </motion.button>
 
@@ -87,7 +93,10 @@ export function Navbar() {
               className="md:hidden p-2 text-slate-500 hover:text-[var(--primary)] transition-colors"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
-              <Icon name={isMobileMenuOpen ? "close" : "menu"} className="text-2xl" />
+              <Icon
+                name={isMobileMenuOpen ? "close" : "menu"}
+                className="text-2xl"
+              />
             </button>
           </div>
         </div>
