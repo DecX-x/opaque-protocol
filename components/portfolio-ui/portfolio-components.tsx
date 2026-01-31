@@ -156,7 +156,7 @@ export function FundManagement() {
       </div>
 
       <div className="mt-12 space-y-4">
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 transition-colors focus-within:border-[var(--secondary)]">
+        <div className="bg-slate-700 dark:bg-[#1e293b] p-4 rounded-2xl border border-slate-600 dark:border-slate-700 transition-colors focus-within:border-[var(--secondary)]">
           <div className="flex justify-between text-xs font-bold mb-4 uppercase text-slate-400">
             <span>Input</span>
             <span>Max: 2.5 ETH</span>
@@ -165,11 +165,11 @@ export function FundManagement() {
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="bg-transparent border-none p-0 text-xl font-bold w-full focus:ring-0 outline-none"
+              className="bg-transparent border-none p-0 text-xl font-bold w-full focus:ring-0 outline-none text-white placeholder:text-slate-500"
               placeholder="0.0"
               type="number"
             />
-            <button className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[var(--secondary)] transition-colors">
+            <button className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl border border-slate-600 hover:border-[var(--secondary)] transition-colors">
               <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[8px] font-bold">
                 Ξ
               </div>
@@ -284,17 +284,17 @@ export function AssetTable() {
       <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
         <h2 className="text-xl font-bold">Your Assets</h2>
         <div className="flex gap-2">
-          <button className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-[var(--primary)] transition-colors">
+          <button className="p-2 rounded-xl bg-slate-800 text-white hover:bg-slate-700 transition-colors">
             <Icon name="filter_list" className="text-xl" />
           </button>
-          <button className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-[var(--primary)] transition-colors">
+          <button className="p-2 rounded-xl bg-slate-800 text-white hover:bg-slate-700 transition-colors">
             <Icon name="search" className="text-xl" />
           </button>
         </div>
       </div>
       <div className="overflow-x-auto flex-grow">
         <table className="w-full text-left">
-          <thead className="bg-slate-50/50 dark:bg-slate-900/20 text-xs font-bold text-slate-400 uppercase">
+          <thead className="bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase">
             <tr>
               <th className="px-8 py-5">Asset</th>
               <th className="px-8 py-5">Price</th>
