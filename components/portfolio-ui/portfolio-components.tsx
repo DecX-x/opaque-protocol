@@ -293,7 +293,7 @@ export function AssetTable() {
         </div>
       </div>
       <div className="overflow-x-auto flex-grow">
-        <table className="w-full text-left">
+        <table className="w-full text-left min-w-[600px]">
           <thead className="bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase">
             <tr>
               <th className="px-8 py-5">Asset</th>

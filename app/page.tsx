@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, Variants } from "framer-motion";
+import { motion, Variants, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import Link from "next/link";
 
@@ -19,46 +19,108 @@ export default function Home() {
 }
 
 function Navbar() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
     <nav className="fixed top-0 w-full z-50 px-6 py-4 pointer-events-none">
-      <div className="max-w-7xl mx-auto glass rounded-2xl px-6 py-3 flex items-center justify-between shadow-sm pointer-events-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-md">
-            <span className="material-symbols-outlined text-white">blur_on</span>
+      <div className="max-w-7xl mx-auto glass rounded-2xl px-6 py-3 shadow-sm pointer-events-auto relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-md">
+              <span className="material-symbols-outlined text-white">blur_on</span>
+            </div>
+            <span className="text-xl font-bold tracking-tight">OPAQUE</span>
           </div>
-          <span className="text-xl font-bold tracking-tight">OPAQUE</span>
+          <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
+            <a className="hover:text-[var(--primary)] transition-colors" href="#">
+              Home
+            </a>
+            <a
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+              href="#how-it-works"
+            >
+              How it Works
+            </a>
+            <a
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+              href="#stats"
+            >
+              Stats
+            </a>
+            <a
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+              href="#"
+            >
+              Docs
+            </a>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/app"
+              className="hidden sm:flex bg-[var(--primary)] text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:scale-105 transition-all active:scale-95 cursor-pointer"
+            >
+              Launch App
+            </Link>
+            
+            {/* Mobile Menu Toggle */}
+            <button
+              className="md:hidden p-2 text-slate-500 hover:text-[var(--primary)] transition-colors"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              <span className="material-symbols-outlined text-2xl">
+                {isMobileMenuOpen ? "close" : "menu"}
+              </span>
+            </button>
+          </div>
         </div>
-        <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
-          <a className="hover:text-[var(--primary)] transition-colors" href="#">
-            Home
-          </a>
-          <a
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-            href="#how-it-works"
-          >
-            How it Works
-          </a>
-          <a
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-            href="#stats"
-          >
-            Stats
-          </a>
-          <a
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-            href="#"
-          >
-            Docs
-          </a>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/app"
-            className="bg-[var(--primary)] text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:scale-105 transition-all active:scale-95 cursor-pointer"
-          >
-            Launch App
-          </Link>
-        </div>
+
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-full left-0 right-0 mt-4 glass rounded-2xl p-4 flex flex-col gap-4 md:hidden shadow-xl"
+            >
+              <a
+                href="#"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Home
+              </a>
+              <a
+                href="#how-it-works"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                How it Works
+              </a>
+              <a
+                href="#stats"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Stats
+              </a>
+              <a
+                href="#"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Docs
+              </a>
+              <Link
+                href="/app"
+                className="bg-[var(--primary)] text-white font-bold py-3 px-4 rounded-xl text-center shadow-lg"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Launch App
+              </Link>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </nav>
   );

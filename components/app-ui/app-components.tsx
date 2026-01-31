@@ -29,57 +29,109 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
 // --- Navbar Component ---
 export function Navbar() {
   const [isConnected, setIsConnected] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
     <nav className="fixed top-0 w-full z-50 px-6 py-4 pointer-events-none">
-      <div className="max-w-7xl mx-auto flex items-center justify-between glass rounded-2xl px-6 py-3 shadow-sm pointer-events-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-sm">
-            <Icon name="blur_on" className="text-white" />
+      <div className="max-w-7xl mx-auto glass rounded-2xl px-6 py-3 shadow-sm pointer-events-auto relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-sm">
+              <Icon name="blur_on" className="text-white" />
+            </div>
+            <span className="text-xl font-bold tracking-tight">
+              OPAQUE <span className="text-slate-400 font-medium hidden sm:inline">TERMINAL</span>
+            </span>
           </div>
-          <span className="text-xl font-bold tracking-tight">
-            OPAQUE <span className="text-slate-400 font-medium">TERMINAL</span>
-          </span>
+
+          <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
+            <Link
+              href="/app"
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+            >
+              Trade
+            </Link>
+            <Link
+              href="/app/portfolio"
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+            >
+              Portfolio
+            </Link>
+            <Link
+              href="/app/history"
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+            >
+              History
+            </Link>
+            <a
+              href="#"
+              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+            >
+              Docs
+            </a>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsConnected(!isConnected)}
+              className="bg-[var(--primary)] text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:shadow-pink-300 transition-all active:scale-95 flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
+            >
+              <Icon name="account_balance_wallet" className="text-base sm:text-lg" />
+              {isConnected ? "0x82...39a1" : "Connect"}
+            </motion.button>
+
+            {/* Mobile Menu Toggle */}
+            <button
+              className="md:hidden p-2 text-slate-500 hover:text-[var(--primary)] transition-colors"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              <Icon name={isMobileMenuOpen ? "close" : "menu"} className="text-2xl" />
+            </button>
+          </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
-          <Link
-            href="/app"
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-          >
-            Trade
-          </Link>
-          <Link
-            href="/app/portfolio"
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-          >
-            Portfolio
-          </Link>
-          <Link
-            href="/app/history"
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-          >
-            History
-          </Link>
-          <a
-            href="#"
-            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-          >
-            Docs
-          </a>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setIsConnected(!isConnected)}
-            className="bg-[var(--primary)] text-white px-5 py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:shadow-pink-300 transition-all active:scale-95 flex items-center gap-2"
-          >
-            <Icon name="account_balance_wallet" className="text-lg" />
-            {isConnected ? "0x82...39a1" : "Connect Wallet"}
-          </motion.button>
-        </div>
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-full left-0 right-0 mt-4 glass rounded-2xl p-4 flex flex-col gap-4 md:hidden shadow-xl"
+            >
+              <Link
+                href="/app"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Trade
+              </Link>
+              <Link
+                href="/app/portfolio"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Portfolio
+              </Link>
+              <Link
+                href="/app/history"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                History
+              </Link>
+              <a
+                href="#"
+                className="text-slate-600 hover:text-[var(--primary)] font-bold py-2 px-4 rounded-xl hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Docs
+              </a>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </nav>
   );
@@ -414,14 +466,14 @@ export function OrderTable({ orders }: { orders: Order[] }) {
           {orders.length} Orders Queued
         </span>
       </div>
-      <div className="glass overflow-hidden rounded-2xl min-h-[150px]">
+      <div className="glass overflow-hidden rounded-2xl min-h-[150px] overflow-x-auto">
         {orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-slate-400 gap-2">
+          <div className="flex flex-col items-center justify-center h-40 text-slate-400 gap-2 min-w-[500px]">
             <Icon name="inbox" className="text-4xl opacity-50" />
             <span className="text-sm font-medium">No active encrypted orders</span>
           </div>
         ) : (
-          <table className="w-full text-left">
+          <table className="w-full text-left min-w-[500px]">
             <thead className="bg-white/40 text-xs font-bold text-slate-400 uppercase">
               <tr>
                 <th className="p-4">Pair</th>
