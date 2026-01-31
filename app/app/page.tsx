@@ -44,7 +44,7 @@ export default function AppPage() {
 
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-6 grid grid-cols-12 gap-8">
+      <main className="max-w-7xl mx-auto px-6 grid grid-cols-12 gap-8 pt-32">
         {/* Left Sidebar */}
         <div className="col-span-12 lg:col-span-3">
           <MarketStats />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import Link from "next/link";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
@@ -30,8 +31,8 @@ export function Navbar() {
   const [isConnected, setIsConnected] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-50 px-6 py-4 glass mb-8 border-b border-white/20">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <nav className="fixed top-0 w-full z-50 px-6 py-4 pointer-events-none">
+      <div className="max-w-7xl mx-auto flex items-center justify-between glass rounded-2xl px-6 py-3 shadow-sm pointer-events-auto">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 pastel-gradient rounded-xl flex items-center justify-center shadow-sm">
             <Icon name="blur_on" className="text-white" />
@@ -42,22 +43,33 @@ export function Navbar() {
         </div>
 
         <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
-          {["Trade", "Portfolio", "Darkpool Stats", "Docs"].map((item) => (
-            <a
-              key={item}
-              href="#"
-              className="text-slate-500 hover:text-[var(--primary)] transition-colors"
-            >
-              {item}
-            </a>
-          ))}
+          <Link
+            href="/app"
+            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+          >
+            Trade
+          </Link>
+          <Link
+            href="/app/portfolio"
+            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+          >
+            Portfolio
+          </Link>
+          <a
+            href="#"
+            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+          >
+            Darkpool Stats
+          </a>
+          <a
+            href="#"
+            className="text-slate-500 hover:text-[var(--primary)] transition-colors"
+          >
+            Docs
+          </a>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            TEE Active
-          </div>
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
