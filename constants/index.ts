@@ -14,7 +14,7 @@ export const CONTRACTS = {
 export const VAULT_ABI = parseAbi([
   "function deposit(address token, uint256 amount) external",
   "function withdraw(address token, uint256 amount) external",
-  "function settleBatch(tuple(address buyer, address seller, address tokenBuy, address tokenSell, uint256 amountBuy, uint256 amountSell, uint256 nonce)[] trades, bytes signature) external",
+  "function settleBatch((address buyer, address seller, address tokenBuy, address tokenSell, uint256 amountBuy, uint256 amountSell, uint256 nonce)[] trades, bytes signature) external",
   "function balances(address user, address token) external view returns (uint256)",
   "function setTeeSigner(address _teeSigner) external"
 ]);
