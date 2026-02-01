@@ -1,3 +1,5 @@
+import { parseAbi } from "viem";
+
 export const CONTRACTS = {
   ARBITRUM_SEPOLIA: {
     USDC: "0x7568f9E2D79eB7fE4396BC78fbB63303d984901A",
@@ -9,16 +11,17 @@ export const CONTRACTS = {
   }
 };
 
-export const VAULT_ABI = [
+export const VAULT_ABI = parseAbi([
   "function deposit(address token, uint256 amount) external",
   "function withdraw(address token, uint256 amount) external",
   "function settleBatch(tuple(address buyer, address seller, address tokenBuy, address tokenSell, uint256 amountBuy, uint256 amountSell, uint256 nonce)[] trades, bytes signature) external",
-  "function balances(address user, address token) external view returns (uint256)"
-];
+  "function balances(address user, address token) external view returns (uint256)",
+  "function setTeeSigner(address _teeSigner) external"
+]);
 
-export const ERC20_ABI = [
+export const ERC20_ABI = parseAbi([
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
   "function balanceOf(address account) external view returns (uint256)",
   "function mint(address to, uint256 amount) external" 
-];
+]);
