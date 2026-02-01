@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
+import { formatUnits } from "viem";
+import { CONTRACTS, ERC20_ABI } from "@/constants";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
@@ -263,10 +264,30 @@ export function TradingPanel({
 }: {
   onPlaceOrder: (order: Order) => void;
 }) {
+  const { address } = useAccount();
   const [side, setSide] = useState<OrderSide>("BUY");
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("2450.00");
   const [status, setStatus] = useState<OrderStatus>("IDLE");
+
+  // Read Real On-Chain Balances
+  const { data: usdcBalance } = useReadContract({
+    address: CONTRACTS.ARBITRUM_SEPOLIA.USDC as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [address],
+  });
+
+  const { data: wethBalance } = useReadContract({
+    address: CONTRACTS.ARBITRUM_SEPOLIA.WETH as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [address],
+  });
+
+  const displayBalance = side === "BUY" 
+    ? usdcBalance ? formatUnits(usdcBalance as bigint, 18) : "0"
+    : wethBalance ? formatUnits(wethBalance as bigint, 18) : "0";
 
   const handleTrade = async () => {
     if (!amount) return;
@@ -347,7 +368,8 @@ export function TradingPanel({
             value={amount}
             onChange={setAmount}
             placeholder="0.00"
-            ticker="USDC"
+            ticker={side === "BUY" ? "USDC" : "WETH"}
+            balance={displayBalance}
           />
 
           <div className="flex justify-center -my-3 relative z-20">
@@ -451,18 +473,27 @@ function InputGroup({
   onChange,
   placeholder,
   ticker,
+  balance,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   ticker: string;
+  balance?: string;
 }) {
   return (
     <div className="space-y-2">
-      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">
-        {label}
-      </label>
+      <div className="flex justify-between items-center ml-1">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+          {label}
+        </label>
+        {balance && (
+          <span className="text-xs font-bold text-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded-md">
+            Balance: {parseFloat(balance).toFixed(4)}
+          </span>
+        )}
+      </div>
       <div className="relative">
         <input
           type="number"
