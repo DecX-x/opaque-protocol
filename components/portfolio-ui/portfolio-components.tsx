@@ -101,9 +101,82 @@ export function StatCard({
   );
 }
 
+// --- Faucet Card ---
+export function FaucetCard() {
+  const { address } = useAccount();
+  const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
+  const { data: hash, writeContract } = useWriteContract();
+  const { isLoading, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const handleMint = () => {
+    if (!address) return;
+    writeContract({
+      address: CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: "mint",
+      args: [address, parseUnits("1000", 18)],
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="glass p-6 rounded-3xl relative overflow-hidden group mb-6"
+    >
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+            <Icon name="water_drop" className="text-2xl" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm">Testnet Faucet</h3>
+            <p className="text-xs text-slate-400">Get mock tokens for testing</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 flex relative">
+           <div className="absolute inset-y-1 w-1/2 bg-white dark:bg-slate-700 shadow-sm rounded-lg transition-all" 
+                style={{ left: tokenSymbol === "USDC" ? "4px" : "calc(50% - 4px)" }} />
+           <button 
+             onClick={() => setTokenSymbol("USDC")}
+             className="flex-1 relative z-10 text-xs font-bold py-2 text-center"
+           >
+             USDC
+           </button>
+           <button 
+             onClick={() => setTokenSymbol("WETH")}
+             className="flex-1 relative z-10 text-xs font-bold py-2 text-center"
+           >
+             WETH
+           </button>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleMint}
+          disabled={isLoading}
+          className="flex-1 bg-purple-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-purple-500/20 disabled:opacity-50"
+        >
+          {isLoading ? (
+             <span className="flex items-center justify-center gap-1"><Icon name="sync" className="animate-spin text-sm" /> Minting</span>
+          ) : isSuccess ? (
+             <span className="flex items-center justify-center gap-1"><Icon name="check" className="text-sm" /> Done</span>
+          ) : (
+             "Mint 1000"
+          )}
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
 // --- Fund Management ---
 export function FundManagement() {
   const { address } = useAccount();
+  const [mode, setMode] = useState<"DEPOSIT" | "WITHDRAW">("DEPOSIT");
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState("");
   const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
@@ -117,7 +190,7 @@ export function FundManagement() {
     hash,
   });
 
-  // Check Allowance
+  // Check Allowance (Only relevant for Deposit)
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: tokenAddress,
     abi: ERC20_ABI,
@@ -128,25 +201,19 @@ export function FundManagement() {
   useEffect(() => {
     if (isConfirmed) {
       setIsProcessing(false);
-      refetchAllowance();
-      if (step === 2) setStep(3); // Moved from Approve to Deposit
-      if (step === 3) {
+      if (mode === "DEPOSIT") {
+        refetchAllowance();
+        if (step === 2) setStep(3);
+        if (step === 3) {
+          setAmount("");
+          setStep(1);
+        }
+      } else {
+        // Withdraw complete
         setAmount("");
-        setStep(1); // Reset after Deposit
       }
     }
-  }, [isConfirmed, step, refetchAllowance]);
-
-  const handleMint = () => {
-    if (!address) return;
-    setIsProcessing(true);
-    writeContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: "mint",
-      args: [address, parseUnits("1000", 18)],
-    });
-  };
+  }, [isConfirmed, step, mode, refetchAllowance]);
 
   const handleApprove = () => {
     if (!amount) return;
@@ -172,9 +239,20 @@ export function FundManagement() {
     });
   };
 
+  const handleWithdraw = () => {
+    if (!amount) return;
+    setIsProcessing(true);
+    writeContract({
+      address: vaultAddress,
+      abi: VAULT_ABI,
+      functionName: "withdraw",
+      args: [tokenAddress, parseUnits(amount, 18)],
+    });
+  };
+
   const parsedAmount = amount ? parseUnits(amount, 18) : BigInt(0);
   const currentAllowance = allowance ? (allowance as bigint) : BigInt(0);
-  const needsApproval = currentAllowance < parsedAmount;
+  const needsApproval = mode === "DEPOSIT" && currentAllowance < parsedAmount;
 
   return (
     <motion.div
@@ -182,45 +260,79 @@ export function FundManagement() {
       animate={{ opacity: 1, x: 0 }}
       className="glass p-8 rounded-3xl h-full flex flex-col"
     >
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 bg-[var(--secondary)]/10 text-[var(--secondary)] rounded-xl flex items-center justify-center">
-          <Icon name="account_balance" />
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-[var(--secondary)]/10 text-[var(--secondary)] rounded-xl flex items-center justify-center">
+            <Icon name="account_balance" />
+          </div>
+          <h2 className="text-xl font-bold">Manage Funds</h2>
         </div>
-        <h2 className="text-xl font-bold">Fund Management</h2>
       </div>
 
-      <div className="space-y-10 flex-grow relative">
-        <StepItem
-          number={1}
-          title="Select Asset"
-          desc="Choose token and amount"
-          active={step >= 1}
-          current={step === 1}
-        />
-        <StepItem
-          number={2}
-          title="Approve Transaction"
-          desc="Grant permission in wallet"
-          active={step >= 2}
-          current={step === 2}
-        />
-        <StepItem
-          number={3}
-          title="Move to Dark Pool"
-          desc="Encrypt and transfer funds"
-          active={step >= 3}
-          current={step === 3}
-          last
-        />
+      {/* Tabs */}
+      <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-8">
+        <button
+          onClick={() => { setMode("DEPOSIT"); setStep(1); }}
+          className={clsx(
+            "flex-1 py-2 rounded-lg text-sm font-bold transition-all",
+            mode === "DEPOSIT" ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Deposit
+        </button>
+        <button
+          onClick={() => { setMode("WITHDRAW"); setStep(1); }}
+          className={clsx(
+            "flex-1 py-2 rounded-lg text-sm font-bold transition-all",
+            mode === "WITHDRAW" ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Withdraw
+        </button>
       </div>
+
+      {mode === "DEPOSIT" ? (
+        <div className="space-y-10 flex-grow relative">
+          <StepItem
+            number={1}
+            title="Select Asset"
+            desc="Choose token and amount"
+            active={step >= 1}
+            current={step === 1}
+          />
+          <StepItem
+            number={2}
+            title="Approve Transaction"
+            desc="Grant permission in wallet"
+            active={step >= 2}
+            current={step === 2}
+          />
+          <StepItem
+            number={3}
+            title="Move to Dark Pool"
+            desc="Encrypt and transfer funds"
+            active={step >= 3}
+            current={step === 3}
+            last
+          />
+        </div>
+      ) : (
+        <div className="flex-grow flex flex-col justify-center items-center text-center space-y-4 opacity-50">
+           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+             <Icon name="outbound" className="text-2xl text-slate-400" />
+           </div>
+           <div>
+             <h3 className="font-bold">Withdraw to Wallet</h3>
+             <p className="text-xs text-slate-400">Funds will be moved from Vault to your Wallet</p>
+           </div>
+        </div>
+      )}
 
       <div className="mt-12 space-y-4">
         <div className="bg-slate-700 dark:bg-[#1e293b] p-4 rounded-2xl border border-slate-600 dark:border-slate-700 transition-colors focus-within:border-[var(--secondary)]">
           <div className="flex justify-between text-xs font-bold mb-4 uppercase text-slate-400">
-            <span>Input</span>
-            <button onClick={handleMint} className="text-[var(--secondary)] hover:underline">
-              [Mint 1000 Mock {tokenSymbol}]
-            </button>
+            <span>Amount</span>
+            <span>{mode}</span>
           </div>
           <div className="flex items-center gap-3">
             <input
@@ -242,46 +354,69 @@ export function FundManagement() {
           </div>
         </div>
         
-        {needsApproval ? (
-             <motion.button
-             whileHover={{ scale: 1.02 }}
-             whileTap={{ scale: 0.98 }}
-             onClick={handleApprove}
-             disabled={isProcessing || isConfirming || !amount}
-             className={clsx(
-               "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
-               !amount || isProcessing || isConfirming
-                 ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                 : "bg-[var(--primary)] text-white shadow-[var(--primary)]/20 hover:shadow-[var(--primary)]/40"
-             )}
-           >
-             {isProcessing || isConfirming ? (
-               <>
-                 <Icon name="sync" className="animate-spin" /> Approving...
-               </>
-             ) : (
-               "APPROVE TOKEN"
-             )}
-           </motion.button>
+        {mode === "DEPOSIT" ? (
+            needsApproval ? (
+                <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleApprove}
+                disabled={isProcessing || isConfirming || !amount}
+                className={clsx(
+                "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
+                !amount || isProcessing || isConfirming
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-[var(--primary)] text-white shadow-[var(--primary)]/20 hover:shadow-[var(--primary)]/40"
+                )}
+            >
+                {isProcessing || isConfirming ? (
+                <>
+                    <Icon name="sync" className="animate-spin" /> Approving...
+                </>
+                ) : (
+                "APPROVE TOKEN"
+                )}
+            </motion.button>
+            ) : (
+                <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleDeposit}
+                disabled={isProcessing || isConfirming || !amount}
+                className={clsx(
+                    "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
+                    !amount || isProcessing || isConfirming
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-[var(--secondary)] text-slate-900 shadow-[var(--secondary)]/20 hover:shadow-[var(--secondary)]/40"
+                )}
+                >
+                {isProcessing || isConfirming ? (
+                    <>
+                    <Icon name="sync" className="animate-spin" /> Depositing...
+                    </>
+                ) : (
+                    "DEPOSIT TO VAULT"
+                )}
+                </motion.button>
+            )
         ) : (
             <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleDeposit}
+            onClick={handleWithdraw}
             disabled={isProcessing || isConfirming || !amount}
             className={clsx(
                 "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
                 !amount || isProcessing || isConfirming
                 ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                : "bg-[var(--secondary)] text-slate-900 shadow-[var(--secondary)]/20 hover:shadow-[var(--secondary)]/40"
+                : "bg-red-500 text-white shadow-red-500/20 hover:shadow-red-500/40"
             )}
             >
             {isProcessing || isConfirming ? (
                 <>
-                <Icon name="sync" className="animate-spin" /> Depositing...
+                <Icon name="sync" className="animate-spin" /> Withdrawing...
                 </>
             ) : (
-                "DEPOSIT TO VAULT"
+                "WITHDRAW FUNDS"
             )}
             </motion.button>
         )}

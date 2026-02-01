@@ -6,10 +6,46 @@ import {
   StatCard,
   FundManagement,
   AssetTable,
+  FaucetCard,
 } from "../../../components/portfolio-ui/portfolio-components";
-import { motion } from "framer-motion";
+import { useAccount, useReadContracts } from "wagmi";
+import { formatUnits } from "viem";
+import { CONTRACTS, ERC20_ABI, VAULT_ABI } from "@/constants";
 
 export default function PortfolioPage() {
+  const { address } = useAccount();
+  
+  const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
+  const usdcAddress = CONTRACTS.ARBITRUM_SEPOLIA.USDC as `0x${string}`;
+  const wethAddress = CONTRACTS.ARBITRUM_SEPOLIA.WETH as `0x${string}`;
+
+  const { data } = useReadContracts({
+    contracts: [
+        // 0: Vault USDC Balance (TVL)
+        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [vaultAddress] },
+        // 1: Vault WETH Balance (TVL)
+        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [vaultAddress] },
+        // 2: User Wallet USDC
+        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address] },
+        // 3: User Wallet WETH
+        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address] },
+        // 4: User Vault USDC
+        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address, usdcAddress] },
+        // 5: User Vault WETH
+        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address, wethAddress] },
+    ]
+  });
+
+  const getVal = (index: number, decimals: number = 18) => 
+    data?.[index]?.result ? parseFloat(formatUnits(data[index].result as bigint, decimals)) : 0;
+
+  const ethPrice = 2450; // Mock Price for stats
+  
+  // Calc Stats
+  const tvl = getVal(0) + (getVal(1) * ethPrice);
+  const walletBal = getVal(2) + (getVal(3) * ethPrice);
+  const vaultBal = getVal(4) + (getVal(5) * ethPrice);
+
   return (
     <div className="min-h-screen bg-[var(--bg-light)] text-slate-800 font-sans selection:bg-[var(--primary)] selection:text-white pb-20 overflow-x-hidden">
       {/* Background Blobs */}
@@ -26,10 +62,10 @@ export default function PortfolioPage() {
             iconColor="text-blue-500"
             iconBg="bg-blue-500/10"
             label="Global Liquidity"
-            value="$412.8M"
+            value={`$${tvl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="GLOBAL"
             badgeColor="text-blue-500 bg-blue-500/10"
-            trend="+12.5% this week"
+            trend="Live TVL"
             trendPositive
           />
           <StatCard
@@ -37,7 +73,7 @@ export default function PortfolioPage() {
             iconColor="text-[var(--primary)]"
             iconBg="bg-[var(--primary)]/10"
             label="Your Wallet"
-            value="$12,450.00"
+            value={`$${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="EXTERNAL"
             badgeColor="text-[var(--primary)] bg-[var(--primary)]/10"
             progressBar
@@ -47,7 +83,7 @@ export default function PortfolioPage() {
             iconColor="text-[var(--secondary)]"
             iconBg="bg-[var(--secondary)]/10"
             label="Dark Pool Balance"
-            value="$84,120.50"
+            value={`$${vaultBal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="PRIVATE"
             badgeColor="text-[var(--secondary)] bg-[var(--secondary)]/10"
             isPrivate
@@ -57,6 +93,7 @@ export default function PortfolioPage() {
         {/* Main Content Grid */}
         <div className="grid grid-cols-12 gap-8">
           <div className="col-span-12 lg:col-span-4">
+            <FaucetCard />
             <FundManagement />
           </div>
           <div className="col-span-12 lg:col-span-8">
