@@ -163,6 +163,7 @@ export function MarketStats() {
   const [isPriceListOpen, setIsPriceListOpen] = useState(false);
 
   const oracleAddress = CONTRACTS.ARBITRUM_SEPOLIA.ORACLE as `0x${string}`;
+  const [priceLoading, setPriceLoading] = useState(true);
 
   const priceContracts = useMemo(
     () =>
@@ -337,6 +338,7 @@ export function TradingPanel({
   const [status, setStatus] = useState<OrderStatus>("IDLE");
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
+  const [priceLoading, setPriceLoading] = useState(true);
   const [tokenPicker, setTokenPicker] = useState<{
     open: boolean;
     type: "pay" | "receive";
@@ -383,8 +385,6 @@ export function TradingPanel({
     ? formatUnits(payVaultBalance as bigint, payToken.decimals)
     : "0";
 
-  const quickTokens = AVAILABLE_TOKENS.slice(0, 5);
-
   const getOraclePrice = (symbol: string) => {
     const idx = AVAILABLE_TOKENS.findIndex((t) => t.symbol === symbol);
     const raw = oraclePrices?.[idx]?.result as bigint | undefined;
@@ -398,10 +398,12 @@ export function TradingPanel({
     const oraclePrice = receiveUsd / payUsd;
     const display = oraclePrice.toFixed(6);
     setPrice(display);
+    setPriceLoading(false);
   }, [oraclePrices, payToken.symbol, receiveToken.symbol]);
 
   const handlePayTokenSelect = (token: (typeof AVAILABLE_TOKENS)[number]) => {
     setPayToken(token);
+    setPriceLoading(true);
     if (token.symbol === receiveToken.symbol) {
       const fallback = AVAILABLE_TOKENS.find(
         (t) => t.symbol !== token.symbol
@@ -414,6 +416,7 @@ export function TradingPanel({
     token: (typeof AVAILABLE_TOKENS)[number]
   ) => {
     setReceiveToken(token);
+    setPriceLoading(true);
     if (token.symbol === payToken.symbol) {
       const fallback = AVAILABLE_TOKENS.find(
         (t) => t.symbol !== token.symbol
@@ -430,6 +433,7 @@ export function TradingPanel({
     setSide((prev) => (prev === "BUY" ? "SELL" : "BUY"));
     setPayToken(receiveToken);
     setReceiveToken(payToken);
+    setPriceLoading(true);
   };
 
   const handleTrade = async () => {
@@ -604,6 +608,7 @@ export function TradingPanel({
             placeholder="0.00"
             ticker={`${payToken.symbol} per ${receiveToken.symbol}`}
             readOnly
+            loading={priceLoading}
           />
 
           <div className="flex items-center justify-between gap-4">
@@ -744,14 +749,126 @@ function TokenPickerModal({
   onSelect: (token: (typeof AVAILABLE_TOKENS)[number]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<"volume" | "alpha">("volume");
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const filtered = tokens.filter((token) => {
+  const volumeRank: Record<string, number> = {
+    USDC: 120,
+    WETH: 90,
+    WBTC: 70,
+    LINK: 55,
+    SOL: 50,
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const favRaw = window.localStorage.getItem("opaque.favorites");
+      const recRaw = window.localStorage.getItem("opaque.recent");
+      setFavorites(favRaw ? JSON.parse(favRaw) : []);
+      setRecent(recRaw ? JSON.parse(recRaw) : []);
+    } catch {
+      setFavorites([]);
+      setRecent([]);
+    }
+  }, [open]);
+
+  const toggleFavorite = (symbol: string) => {
+    const next = favorites.includes(symbol)
+      ? favorites.filter((s) => s !== symbol)
+      : [symbol, ...favorites];
+    setFavorites(next);
+    try {
+      window.localStorage.setItem("opaque.favorites", JSON.stringify(next));
+    } catch {}
+  };
+
+  const bumpRecent = (symbol: string) => {
+    const next = [symbol, ...recent.filter((s) => s !== symbol)].slice(0, 6);
+    setRecent(next);
+    try {
+      window.localStorage.setItem("opaque.recent", JSON.stringify(next));
+    } catch {}
+  };
+
+  const score = (token: (typeof AVAILABLE_TOKENS)[number]) => {
     const q = query.toLowerCase();
-    return (
+    if (!q) return 0;
+    const sym = token.symbol.toLowerCase();
+    const name = token.name.toLowerCase();
+    if (sym === q) return 100;
+    if (sym.startsWith(q)) return 80;
+    if (name.startsWith(q)) return 60;
+    if (sym.includes(q)) return 40;
+    if (name.includes(q)) return 20;
+    return 0;
+  };
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    let list = tokens.filter((token) =>
       token.symbol.toLowerCase().includes(q) ||
       token.name.toLowerCase().includes(q)
     );
-  });
+
+    if (q) {
+      list = list
+        .map((token) => ({ token, score: score(token) }))
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.token);
+    }
+
+    if (sortBy === "volume") {
+      list = [...list].sort(
+        (a, b) => (volumeRank[b.symbol] || 0) - (volumeRank[a.symbol] || 0)
+      );
+    } else {
+      list = [...list].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    }
+
+    return list;
+  }, [tokens, query, sortBy]);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveIndex(0);
+  }, [open, query, sortBy]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (!filtered.length) return;
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((prev) => Math.max(prev - 1, 0));
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const token = filtered[activeIndex];
+        if (token) {
+          onSelect(token);
+          bumpRecent(token.symbol);
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, filtered, activeIndex, onClose, onSelect]);
 
   return (
     <AnimatePresence>
@@ -789,26 +906,116 @@ function TokenPickerModal({
                 <Icon name="close" className="text-xl text-slate-400" />
               </button>
             </div>
+            <div className="flex items-center justify-between mb-4 gap-3">
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <span className="text-slate-400">Sort</span>
+                <button
+                  onClick={() => setSortBy("volume")}
+                  className={clsx(
+                    "px-2.5 py-1 rounded-full border",
+                    sortBy === "volume"
+                      ? "bg-[var(--secondary)]/15 text-[var(--secondary)] border-[var(--secondary)]/40"
+                      : "bg-white text-slate-500 border-slate-100"
+                  )}
+                >
+                  Volume
+                </button>
+                <button
+                  onClick={() => setSortBy("alpha")}
+                  className={clsx(
+                    "px-2.5 py-1 rounded-full border",
+                    sortBy === "alpha"
+                      ? "bg-[var(--secondary)]/15 text-[var(--secondary)] border-[var(--secondary)]/40"
+                      : "bg-white text-slate-500 border-slate-100"
+                  )}
+                >
+                  A-Z
+                </button>
+              </div>
+              <div className="text-xs text-slate-400">
+                {filtered.length} tokens
+              </div>
+            </div>
             <div className="mb-4">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search tokens"
                 className="w-full rounded-2xl border border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 focus:outline-none focus:border-[var(--secondary)]"
+                autoFocus
               />
             </div>
+            {favorites.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Favorites
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {favorites
+                    .map((symbol) => tokens.find((t) => t.symbol === symbol))
+                    .filter(Boolean)
+                    .map((token) => (
+                      <button
+                        key={(token as any).symbol}
+                        onClick={() => {
+                          onSelect(token as any);
+                          bumpRecent((token as any).symbol);
+                          onClose();
+                        }}
+                        className="px-3 py-1.5 rounded-full border border-slate-100 bg-white text-xs font-semibold"
+                      >
+                        {(token as any).symbol}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+            {recent.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Recent
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {recent
+                    .map((symbol) => tokens.find((t) => t.symbol === symbol))
+                    .filter(Boolean)
+                    .map((token) => (
+                      <button
+                        key={(token as any).symbol}
+                        onClick={() => {
+                          onSelect(token as any);
+                          bumpRecent((token as any).symbol);
+                          onClose();
+                        }}
+                        className="px-3 py-1.5 rounded-full border border-slate-100 bg-white text-xs font-semibold"
+                      >
+                        {(token as any).symbol}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
             <div className="max-h-[360px] overflow-auto space-y-2">
-              {filtered.map((token) => (
+              {filtered.map((token, idx) => (
                 <button
                   key={token.symbol}
                   onClick={() => {
                     onSelect(token);
+                    bumpRecent(token.symbol);
                     onClose();
                   }}
-                  className="w-full flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 hover:bg-slate-50"
+                  className={clsx(
+                    "w-full flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 hover:bg-slate-50",
+                    idx === activeIndex && "ring-2 ring-[var(--secondary)]/40"
+                  )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                    <div
+                      className={clsx(
+                        "w-9 h-9 rounded-full text-white flex items-center justify-center text-xs font-bold",
+                        token.color
+                      )}
+                    >
                       {token.logo}
                     </div>
                     <div className="text-left">
@@ -816,7 +1023,26 @@ function TokenPickerModal({
                       <div className="text-xs text-slate-400">{token.name}</div>
                     </div>
                   </div>
-                  <Icon name="arrow_forward" className="text-slate-300" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(token.symbol);
+                      }}
+                      className="p-1 rounded-full hover:bg-slate-100"
+                    >
+                      <Icon
+                        name={favorites.includes(token.symbol) ? "star" : "star_outline"}
+                        className={clsx(
+                          "text-lg",
+                          favorites.includes(token.symbol)
+                            ? "text-[var(--secondary)]"
+                            : "text-slate-300"
+                        )}
+                      />
+                    </button>
+                    <Icon name="arrow_forward" className="text-slate-300" />
+                  </div>
                 </button>
               ))}
               {filtered.length === 0 && (
@@ -824,6 +1050,10 @@ function TokenPickerModal({
                   No tokens found
                 </div>
               )}
+            </div>
+            <div className="mt-4 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>Use Up/Down to navigate</span>
+              <span>Enter to select, Esc to close</span>
             </div>
           </motion.div>
         </motion.div>
@@ -840,6 +1070,7 @@ function InputGroup({
   ticker,
   balance,
   readOnly,
+  loading,
 }: {
   label: string;
   value: string;
@@ -848,6 +1079,7 @@ function InputGroup({
   ticker: string;
   balance?: string;
   readOnly?: boolean;
+  loading?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -867,7 +1099,10 @@ function InputGroup({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           readOnly={readOnly}
-          className="w-full bg-white border-2 border-slate-100 rounded-2xl p-4 text-2xl font-bold focus:border-[var(--secondary)] focus:ring-0 transition-all outline-none text-slate-800 placeholder:text-slate-300"
+          className={clsx(
+            "w-full bg-white border-2 rounded-2xl p-4 text-2xl font-bold focus:border-[var(--secondary)] focus:ring-0 transition-all outline-none text-slate-800 placeholder:text-slate-300",
+            loading ? "border-slate-200 animate-pulse" : "border-slate-100"
+          )}
           placeholder={placeholder}
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm bg-slate-50 px-2 py-1 rounded-lg pointer-events-none">
