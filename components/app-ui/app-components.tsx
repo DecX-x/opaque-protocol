@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
-import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
 import { formatUnits, parseUnits } from "viem";
 import { CONTRACTS, ERC20_ABI } from "@/constants";
 import { injected } from "wagmi/connectors";
@@ -283,14 +283,20 @@ export function TradingPanel({
     address: CONTRACTS.ARBITRUM_SEPOLIA.USDC as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
-    args: [address],
+    args: [address as `0x${string}`],
+    query: {
+        enabled: !!address
+    }
   });
 
   const { data: wethBalance } = useReadContract({
     address: CONTRACTS.ARBITRUM_SEPOLIA.WETH as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
-    args: [address],
+    args: [address as `0x${string}`],
+    query: {
+        enabled: !!address
+    }
   });
 
   const displayBalance = side === "BUY" 
