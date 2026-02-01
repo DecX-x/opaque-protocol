@@ -32,13 +32,20 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
 
 // --- Navbar Component ---
 export function Navbar() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (isConnected && chainId !== 421614) {
+      switchChain({ chainId: 421614 });
+    }
+  }, [isConnected, chainId, switchChain]);
 
   const handleConnect = () => {
     if (isConnected) {
