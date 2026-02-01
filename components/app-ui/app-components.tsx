@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
-import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useReadContracts,
+  useSwitchChain,
+} from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits } from "viem";
-import { CONTRACTS, ERC20_ABI } from "@/constants";
+import { CONTRACTS, ORACLE_ABI, VAULT_ABI, ERC20_ABI } from "@/constants";
+import { AVAILABLE_TOKENS } from "@/components/portfolio-ui/portfolio-components";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
@@ -153,6 +159,44 @@ export function Navbar() {
 
 // --- Market Stats (Left Column) ---
 export function MarketStats() {
+  const [priceIndex, setPriceIndex] = useState(0);
+  const [isPriceListOpen, setIsPriceListOpen] = useState(false);
+
+  const oracleAddress = CONTRACTS.ARBITRUM_SEPOLIA.ORACLE as `0x${string}`;
+
+  const priceContracts = useMemo(
+    () =>
+      AVAILABLE_TOKENS.map((token) => {
+        const tokenAddr =
+          CONTRACTS.ARBITRUM_SEPOLIA[
+            token.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
+          ] as `0x${string}`;
+        return {
+          address: oracleAddress,
+          abi: ORACLE_ABI,
+          functionName: "getPrice",
+          args: [tokenAddr],
+        };
+      }),
+    [oracleAddress]
+  );
+
+  const { data: oraclePrices } = useReadContracts({
+    contracts: priceContracts,
+    query: { refetchInterval: 8000 },
+  });
+
+  const activeToken = AVAILABLE_TOKENS[priceIndex % AVAILABLE_TOKENS.length];
+  const activePriceRaw = oraclePrices?.[priceIndex]?.result as bigint | undefined;
+  const activePrice = activePriceRaw ? formatUnits(activePriceRaw, 8) : "0";
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPriceIndex((prev) => (prev + 1) % AVAILABLE_TOKENS.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -160,23 +204,37 @@ export function MarketStats() {
       className="space-y-6"
     >
       {/* Price Card */}
-      <div className="glass p-6 rounded-2xl">
+      <div
+        className="glass p-6 rounded-2xl cursor-pointer relative"
+        onClick={() => setIsPriceListOpen((v) => !v)}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] font-bold">
-              Ξ
+              {activeToken.logo}
             </div>
-            <span className="font-bold">WETH / USDC</span>
+            <span className="font-bold">{activeToken.symbol} / USD</span>
           </div>
           <span className="text-xs font-bold text-[var(--secondary)] bg-[var(--secondary)]/10 px-2 py-1 rounded-md">
             ORACLE
           </span>
         </div>
         <div className="mb-2">
-          <div className="text-3xl font-extrabold">$2,451.29</div>
-          <div className="text-green-500 text-sm font-semibold flex items-center">
-            <Icon name="trending_up" className="text-sm mr-1" />
-            +2.4% (24h)
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeToken.symbol}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25 }}
+              className="text-3xl font-extrabold"
+            >
+              ${parseFloat(activePrice).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+            </motion.div>
+          </AnimatePresence>
+          <div className="text-slate-400 text-xs font-semibold flex items-center gap-1">
+            <Icon name="swap_horiz" className="text-sm" />
+            Tap to view all prices
           </div>
         </div>
         {/* Mock Chart Bars */}
@@ -194,6 +252,38 @@ export function MarketStats() {
             />
           ))}
         </div>
+
+        <AnimatePresence>
+          {isPriceListOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="absolute left-6 right-6 top-full mt-3 bg-white/90 backdrop-blur rounded-2xl border border-slate-100 shadow-xl p-4 z-20"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                {AVAILABLE_TOKENS.map((token, idx) => {
+                  const priceRaw = oraclePrices?.[idx]?.result as bigint | undefined;
+                  const price = priceRaw ? formatUnits(priceRaw, 8) : "0";
+                  return (
+                    <div
+                      key={token.symbol}
+                      className="flex items-center justify-between bg-white rounded-xl border border-slate-100 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-500">{token.logo}</span>
+                        <span className="text-xs font-bold">{token.symbol}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-600">
+                        ${parseFloat(price).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Privacy Status */}
@@ -254,31 +344,52 @@ export function TradingPanel({
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("2450.00");
   const [status, setStatus] = useState<OrderStatus>("IDLE");
+  const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
+  const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
 
-  // Read Real On-Chain Balances
-  const { data: usdcBalance } = useReadContract({
-    address: CONTRACTS.ARBITRUM_SEPOLIA.USDC as `0x${string}`,
+  useEffect(() => {
+    if (side === "BUY") {
+      setPayToken(AVAILABLE_TOKENS[0]);
+      setReceiveToken(AVAILABLE_TOKENS[1]);
+    } else {
+      setPayToken(AVAILABLE_TOKENS[1]);
+      setReceiveToken(AVAILABLE_TOKENS[0]);
+    }
+  }, [side]);
+
+  const payTokenAddress =
+    CONTRACTS.ARBITRUM_SEPOLIA[
+      payToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
+    ] as `0x${string}`;
+
+  const { data: payBalance } = useReadContract({
+    address: payTokenAddress,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: [address as `0x${string}`],
-    query: {
-        enabled: !!address
-    }
+    query: { enabled: !!address, refetchInterval: 8000 },
   });
 
-  const { data: wethBalance } = useReadContract({
-    address: CONTRACTS.ARBITRUM_SEPOLIA.WETH as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: [address as `0x${string}`],
-    query: {
-        enabled: !!address
-    }
+  const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
+  const { data: payVaultBalance } = useReadContract({
+    address: vaultAddress,
+    abi: VAULT_ABI,
+    functionName: "balances",
+    args: [address as `0x${string}`, payTokenAddress],
+    query: { enabled: !!address, refetchInterval: 8000 },
   });
 
-  const displayBalance = side === "BUY" 
-    ? usdcBalance ? formatUnits(usdcBalance as bigint, 18) : "0"
-    : wethBalance ? formatUnits(wethBalance as bigint, 18) : "0";
+  const displayBalance = payVaultBalance
+    ? formatUnits(payVaultBalance as bigint, payToken.decimals)
+    : "0";
+
+  const quickTokens = AVAILABLE_TOKENS.slice(0, 5);
+
+  const swapTokens = () => {
+    setSide((prev) => (prev === "BUY" ? "SELL" : "BUY"));
+    setPayToken(receiveToken);
+    setReceiveToken(payToken);
+  };
 
   const handleTrade = async () => {
     if (!amount || !address) return;
@@ -287,30 +398,28 @@ export function TradingPanel({
       setStatus("ENCRYPTING");
       
       // Calculate Amounts (Simplified for Demo)
-      // BUY: User pays USDC (amount), gets WETH
-      // SELL: User pays WETH (amount), gets USDC
-      const amountSell = parseUnits(amount, 18).toString();
+      // BUY/SELL are UI semantics. The actual trade uses the selected tokens.
+      const amountSell = parseUnits(amount, payToken.decimals).toString();
       let amountBuy = "0";
       
-      if (side === "BUY") {
-        // Paying USDC, Buying WETH. WETH = USDC / Price
-        // Demo simplification: ignore precise float math here
-        const wethAmt = parseFloat(amount) / parseFloat(price);
-        amountBuy = parseUnits(wethAmt.toFixed(18), 18).toString();
-      } else {
-        // Paying WETH, Buying USDC. USDC = WETH * Price
-        const usdcAmt = parseFloat(amount) * parseFloat(price);
-        amountBuy = parseUnits(usdcAmt.toFixed(18), 18).toString();
-      }
+      // Demo pricing only; use oracle later for real quotes.
+      const computed = side === "BUY"
+        ? parseFloat(amount) / parseFloat(price)
+        : parseFloat(amount) * parseFloat(price);
+      amountBuy = parseUnits(computed.toFixed(receiveToken.decimals), receiveToken.decimals).toString();
 
       // Construct Order Object
       const orderData = {
         id: Math.random().toString(36).substr(2, 9),
         owner: address,
-        pair: "WETH/USDC",
+        pair: `${receiveToken.symbol}/${payToken.symbol}`,
         side,
-        tokenBuy: side === "BUY" ? CONTRACTS.ARBITRUM_SEPOLIA.WETH : CONTRACTS.ARBITRUM_SEPOLIA.USDC,
-        tokenSell: side === "BUY" ? CONTRACTS.ARBITRUM_SEPOLIA.USDC : CONTRACTS.ARBITRUM_SEPOLIA.WETH,
+        tokenBuy: CONTRACTS.ARBITRUM_SEPOLIA[
+          receiveToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
+        ],
+        tokenSell: CONTRACTS.ARBITRUM_SEPOLIA[
+          payToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
+        ],
         amountBuy,
         amountSell,
         price,
@@ -342,7 +451,7 @@ export function TradingPanel({
       // Add Order to Table (Visual only for now)
       onPlaceOrder({
         id: orderData.id,
-        pair: "WETH/USDC",
+        pair: `${receiveToken.symbol}/${payToken.symbol}`,
         side,
         amount,
         price,
@@ -409,21 +518,23 @@ export function TradingPanel({
         {/* Inputs */}
         <div className="space-y-6">
           <InputGroup
-            label="You Pay"
+            label="You Pay (Dark Pool)"
             value={amount}
             onChange={setAmount}
             placeholder="0.00"
-            ticker={side === "BUY" ? "USDC" : "WETH"}
+            ticker={payToken.symbol}
             balance={displayBalance}
           />
 
           <div className="flex justify-center -my-3 relative z-20">
-            <motion.div
+            <motion.button
+              type="button"
               whileHover={{ rotate: 180 }}
+              onClick={swapTokens}
               className="bg-white p-2 rounded-full shadow-lg border border-slate-100 cursor-pointer"
             >
               <Icon name="swap_vert" className="text-[var(--primary)]" />
-            </motion.div>
+            </motion.button>
           </div>
 
           <InputGroup
@@ -431,7 +542,7 @@ export function TradingPanel({
             value={price}
             onChange={setPrice}
             placeholder="0.00"
-            ticker="USDC per ETH"
+            ticker={`${payToken.symbol} per ${receiveToken.symbol}`}
           />
 
           {/* Action Button */}

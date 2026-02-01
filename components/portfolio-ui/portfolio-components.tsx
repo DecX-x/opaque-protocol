@@ -377,6 +377,10 @@ export function FundManagement() {
     abi: ERC20_ABI,
     functionName: "allowance",
     args: [address || '0x0000000000000000000000000000000000000000', vaultAddress],
+    query: {
+      enabled: !!address,
+      refetchInterval: 8000,
+    },
   });
 
   useEffect(() => {
@@ -385,12 +389,9 @@ export function FundManagement() {
         refetchAllowance();
         // Auto-advance logic
         if (step === 2) setStep(3);
-        if (step === 3) {
-          setAmount("");
-          setStep(1);
-        }
+        if (step === 3) setStep(1);
       } else {
-        setAmount("");
+        setStep(1);
       }
     }
   }, [isConfirmed, step, mode, refetchAllowance]);
@@ -805,6 +806,10 @@ function AssetRow({ token, index, userAddress, vaultAddress }: { token: any, ind
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: [userAddress || '0x0000000000000000000000000000000000000000'],
+    query: {
+      enabled: !!userAddress,
+      refetchInterval: 8000,
+    },
   });
 
   // Vault Balance
@@ -813,6 +818,10 @@ function AssetRow({ token, index, userAddress, vaultAddress }: { token: any, ind
     abi: VAULT_ABI,
     functionName: "balances",
     args: [userAddress || '0x0000000000000000000000000000000000000000', token.address],
+    query: {
+      enabled: !!userAddress,
+      refetchInterval: 8000,
+    },
   });
 
   return (

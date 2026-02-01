@@ -33,7 +33,10 @@ export default function PortfolioPage() {
     ];
   });
 
-  const { data } = useReadContracts({ contracts });
+  const { data } = useReadContracts({
+    contracts,
+    query: { refetchInterval: 8000 },
+  });
 
   // Calculate Stats
   let totalWallet = 0;
