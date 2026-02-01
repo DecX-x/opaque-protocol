@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
 import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import { CONTRACTS, ERC20_ABI } from "@/constants";
 import { injected } from "wagmi/connectors";
 
@@ -291,32 +291,86 @@ export function TradingPanel({
     : wethBalance ? formatUnits(wethBalance as bigint, 18) : "0";
 
   const handleTrade = async () => {
-    if (!amount) return;
+    if (!amount || !address) return;
 
-    setStatus("ENCRYPTING");
-    // Mock Encryption Delay
-    await new Promise((r) => setTimeout(r, 800));
-    setStatus("SENDING");
-    // Mock Network Delay
-    await new Promise((r) => setTimeout(r, 800));
-    setStatus("SUCCESS");
+    try {
+      setStatus("ENCRYPTING");
+      
+      // Calculate Amounts (Simplified for Demo)
+      // BUY: User pays USDC (amount), gets WETH
+      // SELL: User pays WETH (amount), gets USDC
+      const amountSell = parseUnits(amount, 18).toString();
+      let amountBuy = "0";
+      
+      if (side === "BUY") {
+        // Paying USDC, Buying WETH. WETH = USDC / Price
+        // Demo simplification: ignore precise float math here
+        const wethAmt = parseFloat(amount) / parseFloat(price);
+        amountBuy = parseUnits(wethAmt.toFixed(18), 18).toString();
+      } else {
+        // Paying WETH, Buying USDC. USDC = WETH * Price
+        const usdcAmt = parseFloat(amount) * parseFloat(price);
+        amountBuy = parseUnits(usdcAmt.toFixed(18), 18).toString();
+      }
 
-    // Add Order
-    onPlaceOrder({
-      id: Math.random().toString(36).substr(2, 9),
-      pair: "WETH/USDC",
-      side,
-      amount,
-      price,
-      status: side === "BUY" ? "Encrypted" : "Queued",
-      timestamp: new Date(),
-    });
+      // Construct Order Object
+      const orderData = {
+        id: Math.random().toString(36).substr(2, 9),
+        owner: address,
+        pair: "WETH/USDC",
+        side,
+        tokenBuy: side === "BUY" ? CONTRACTS.ARBITRUM_SEPOLIA.WETH : CONTRACTS.ARBITRUM_SEPOLIA.USDC,
+        tokenSell: side === "BUY" ? CONTRACTS.ARBITRUM_SEPOLIA.USDC : CONTRACTS.ARBITRUM_SEPOLIA.WETH,
+        amountBuy,
+        amountSell,
+        price,
+        timestamp: new Date().toISOString(),
+      };
 
-    // Reset
-    setTimeout(() => {
+      // Initialize iExec Data Protector
+      // @ts-ignore - window.ethereum is not typed by default
+      if (typeof window === "undefined" || !window.ethereum) {
+        throw new Error("No wallet provider found");
+      }
+      
+      // @ts-ignore
+      const dataProtector = new IExecDataProtector(window.ethereum);
+      
+      const protectedData = await dataProtector.protectData({
+        data: { order: JSON.stringify(orderData) },
+        name: `Opaque Order ${orderData.id}`,
+      });
+
+      console.log("Protected Data Address:", protectedData.address);
+
+      setStatus("SENDING");
+      // Simulate sending to OrderBook / iExec Task
+      await new Promise((r) => setTimeout(r, 1000));
+      
+      setStatus("SUCCESS");
+
+      // Add Order to Table (Visual only for now)
+      onPlaceOrder({
+        id: orderData.id,
+        pair: "WETH/USDC",
+        side,
+        amount,
+        price,
+        status: "Encrypted",
+        timestamp: new Date(),
+      });
+
+      // Reset
+      setTimeout(() => {
+        setStatus("IDLE");
+        setAmount("");
+      }, 2000);
+
+    } catch (e) {
+      console.error(e);
       setStatus("IDLE");
-      setAmount("");
-    }, 1000);
+      alert("Encryption Failed: " + (e as Error).message);
+    }
   };
 
   return (

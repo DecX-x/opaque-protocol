@@ -342,25 +342,12 @@ function StepItem({
 
 // --- Asset Table ---
 export function AssetTable() {
-  const assets = [
-    {
-      symbol: "WETH",
-      name: "Wrapped Ethereum",
-      price: 2451.29,
-      balanceWallet: 2.45,
-      balanceDark: 15.2,
-      logo: "Ξ",
-      color: "bg-indigo-500",
-    },
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      price: 1.0,
-      balanceWallet: 6444.34,
-      balanceDark: 46860.9,
-      logo: "$",
-      color: "bg-blue-500",
-    },
+  const { address } = useAccount();
+  const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
+  
+  const tokens = [
+    { symbol: "WETH", address: CONTRACTS.ARBITRUM_SEPOLIA.WETH, logo: "Ξ", color: "bg-indigo-500", decimals: 18 },
+    { symbol: "USDC", address: CONTRACTS.ARBITRUM_SEPOLIA.USDC, logo: "$", color: "bg-blue-500", decimals: 18 },
   ];
 
   return (
@@ -385,72 +372,76 @@ export function AssetTable() {
           <thead className="bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase">
             <tr>
               <th className="px-8 py-5">Asset</th>
-              <th className="px-8 py-5">Price</th>
               <th className="px-8 py-5 text-center">Wallet Balance</th>
               <th className="px-8 py-5 text-center">Dark Pool Balance</th>
               <th className="px-8 py-5 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {assets.map((asset, i) => (
-              <motion.tr
-                key={asset.symbol}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
-              >
-                <td className="px-8 py-6">
-                  <div className="flex items-center gap-3">
-                    <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm", asset.color)}>
-                      {asset.logo}
-                    </div>
-                    <div>
-                      <div className="font-bold">{asset.symbol}</div>
-                      <div className="text-xs text-slate-400">{asset.name}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-8 py-6 font-mono text-sm font-medium">
-                  ${asset.price.toLocaleString()}
-                </td>
-                <td className="px-8 py-6 text-center">
-                  <div className="font-bold">{asset.balanceWallet.toLocaleString()}</div>
-                  <div className="text-xs text-slate-400">
-                    ${(asset.balanceWallet * asset.price).toLocaleString()}
-                  </div>
-                </td>
-                <td className="px-8 py-6 text-center">
-                  <div className="font-bold text-[var(--secondary)]">
-                    {asset.balanceDark.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    ${(asset.balanceDark * asset.price).toLocaleString()}
-                  </div>
-                </td>
-                <td className="px-8 py-6 text-right">
-                  <div className="flex justify-end gap-2">
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-4 py-2 rounded-xl border border-[var(--secondary)] text-[var(--secondary)] text-xs font-bold hover:bg-[var(--secondary)] hover:text-slate-900 transition-colors"
-                    >
-                      Deposit
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      Withdraw
-                    </motion.button>
-                  </div>
-                </td>
-              </motion.tr>
+            {tokens.map((token, i) => (
+              <AssetRow 
+                key={token.symbol} 
+                token={token} 
+                index={i} 
+                userAddress={address} 
+                vaultAddress={vaultAddress} 
+              />
             ))}
           </tbody>
         </table>
       </div>
     </motion.div>
+  );
+}
+
+function AssetRow({ token, index, userAddress, vaultAddress }: { token: any, index: number, userAddress?: `0x${string}`, vaultAddress: `0x${string}` }) {
+  // Wallet Balance
+  const { data: walletBal } = useReadContract({
+    address: token.address as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [userAddress],
+  });
+
+  // Vault Balance
+  const { data: vaultBal } = useReadContract({
+    address: vaultAddress,
+    abi: VAULT_ABI,
+    functionName: "balances",
+    args: [userAddress, token.address],
+  });
+
+  return (
+    <motion.tr
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+    >
+      <td className="px-8 py-6">
+        <div className="flex items-center gap-3">
+          <div className={clsx("w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm", token.color)}>
+            {token.logo}
+          </div>
+          <div>
+            <div className="font-bold">{token.symbol}</div>
+            <div className="text-xs text-slate-400">Mock Token</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-8 py-6 text-center">
+        <div className="font-bold">
+            {walletBal ? parseFloat(formatUnits(walletBal as bigint, token.decimals)).toFixed(4) : "0.0000"}
+        </div>
+      </td>
+      <td className="px-8 py-6 text-center">
+        <div className="font-bold text-[var(--secondary)]">
+            {vaultBal ? parseFloat(formatUnits(vaultBal as bigint, token.decimals)).toFixed(4) : "0.0000"}
+        </div>
+      </td>
+      <td className="px-8 py-6 text-right">
+        <span className="text-xs text-slate-400 font-medium">Manage above</span>
+      </td>
+    </motion.tr>
   );
 }
