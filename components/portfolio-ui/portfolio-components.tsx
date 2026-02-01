@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { parseUnits, formatUnits } from "viem";
+import { CONTRACTS, ERC20_ABI, VAULT_ABI } from "@/constants";
 
 // --- Icons (Material Symbols wrapper) ---
 const Icon = ({ name, className }: { name: string; className?: string }) => (
