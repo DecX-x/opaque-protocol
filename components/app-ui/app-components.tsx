@@ -347,28 +347,10 @@ export function TradingPanel({
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
 
-  useEffect(() => {
-    if (side === "BUY") {
-      setPayToken(AVAILABLE_TOKENS[0]);
-      setReceiveToken(AVAILABLE_TOKENS[1]);
-    } else {
-      setPayToken(AVAILABLE_TOKENS[1]);
-      setReceiveToken(AVAILABLE_TOKENS[0]);
-    }
-  }, [side]);
-
   const payTokenAddress =
     CONTRACTS.ARBITRUM_SEPOLIA[
       payToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
     ] as `0x${string}`;
-
-  const { data: payBalance } = useReadContract({
-    address: payTokenAddress,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: [address as `0x${string}`],
-    query: { enabled: !!address, refetchInterval: 8000 },
-  });
 
   const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
   const { data: payVaultBalance } = useReadContract({
@@ -385,6 +367,28 @@ export function TradingPanel({
 
   const quickTokens = AVAILABLE_TOKENS.slice(0, 5);
 
+  const handlePayTokenSelect = (token: (typeof AVAILABLE_TOKENS)[number]) => {
+    setPayToken(token);
+    if (token.symbol === receiveToken.symbol) {
+      const fallback = AVAILABLE_TOKENS.find(
+        (t) => t.symbol !== token.symbol
+      );
+      if (fallback) setReceiveToken(fallback);
+    }
+  };
+
+  const handleReceiveTokenSelect = (
+    token: (typeof AVAILABLE_TOKENS)[number]
+  ) => {
+    setReceiveToken(token);
+    if (token.symbol === payToken.symbol) {
+      const fallback = AVAILABLE_TOKENS.find(
+        (t) => t.symbol !== token.symbol
+      );
+      if (fallback) setPayToken(fallback);
+    }
+  };
+
   const swapTokens = () => {
     setSide((prev) => (prev === "BUY" ? "SELL" : "BUY"));
     setPayToken(receiveToken);
@@ -393,6 +397,11 @@ export function TradingPanel({
 
   const handleTrade = async () => {
     if (!amount || !address) return;
+
+    if (payToken.symbol === receiveToken.symbol) {
+      alert("Please choose different pay and receive tokens.");
+      return;
+    }
 
     try {
       setStatus("ENCRYPTING");
@@ -484,36 +493,50 @@ export function TradingPanel({
 
       <div className="relative z-10">
         {/* Toggle */}
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8 relative">
-          <div className="absolute inset-0 p-1.5 flex pointer-events-none">
-            <motion.div
-              layout
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8 relative">
+            <div className="absolute inset-0 p-1.5 flex pointer-events-none">
+              <motion.div
+                layout
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className={clsx(
+                  "w-1/2 h-full rounded-xl shadow-md",
+                  side === "BUY" ? "bg-[var(--secondary)]" : "translate-x-full bg-[var(--primary)]"
+                )}
+              />
+            </div>
+            <button
+              onClick={() => setSide("BUY")}
               className={clsx(
-                "w-1/2 h-full rounded-xl shadow-md",
-                side === "BUY" ? "bg-[var(--secondary)]" : "translate-x-full bg-[var(--primary)]"
+                "flex-1 py-3 rounded-xl font-bold transition-colors z-10 relative",
+                side === "BUY" ? "text-white" : "text-slate-500 hover:text-slate-700"
               )}
-            />
+            >
+              BUY
+            </button>
+            <button
+              onClick={() => setSide("SELL")}
+              className={clsx(
+                "flex-1 py-3 rounded-xl font-bold transition-colors z-10 relative",
+                side === "SELL" ? "text-white" : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              SELL
+            </button>
           </div>
-          <button
-            onClick={() => setSide("BUY")}
-            className={clsx(
-              "flex-1 py-3 rounded-xl font-bold transition-colors z-10 relative",
-              side === "BUY" ? "text-white" : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            BUY
-          </button>
-          <button
-            onClick={() => setSide("SELL")}
-            className={clsx(
-              "flex-1 py-3 rounded-xl font-bold transition-colors z-10 relative",
-              side === "SELL" ? "text-white" : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            SELL
-          </button>
-        </div>
+          <div className="flex items-center justify-between -mt-4 mb-6 text-xs font-semibold text-slate-500">
+            <div className="flex items-center gap-2">
+              <span className="uppercase tracking-widest">From</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--secondary)]/10 text-[var(--secondary)]">
+                {payToken.symbol}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="uppercase tracking-widest">To</span>
+              <span className="px-2 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)]">
+                {receiveToken.symbol}
+              </span>
+            </div>
+          </div>
 
         {/* Inputs */}
         <div className="space-y-6">
@@ -522,7 +545,7 @@ export function TradingPanel({
               <button
                 key={token.symbol}
                 type="button"
-                onClick={() => setPayToken(token)}
+                onClick={() => handlePayTokenSelect(token)}
                 className={clsx(
                   "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors",
                   payToken.symbol === token.symbol
@@ -561,6 +584,24 @@ export function TradingPanel({
             placeholder="0.00"
             ticker={`${payToken.symbol} per ${receiveToken.symbol}`}
           />
+
+          <div className="flex flex-wrap items-center gap-2 justify-center">
+            {quickTokens.map((token) => (
+              <button
+                key={token.symbol}
+                type="button"
+                onClick={() => handleReceiveTokenSelect(token)}
+                className={clsx(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors",
+                  receiveToken.symbol === token.symbol
+                    ? "bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/40"
+                    : "bg-white/70 text-slate-500 border-slate-100 hover:text-slate-700"
+                )}
+              >
+                Receive {token.symbol}
+              </button>
+            ))}
+          </div>
 
           {/* Action Button */}
           <div className="pt-4">
