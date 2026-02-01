@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { TxGuardProvider } from "@/components/tx-guard";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta",
@@ -36,7 +37,9 @@ export default function RootLayout({
       <body
         className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} antialiased bg-[var(--bg-light)] text-slate-800 overflow-x-hidden font-sans`}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          <TxGuardProvider>{children}</TxGuardProvider>
+        </Providers>
       </body>
     </html>
   );

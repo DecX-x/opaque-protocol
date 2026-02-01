@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
-import { useAccount, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
+import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatUnits, parseUnits } from "viem";
 import { CONTRACTS, ERC20_ABI } from "@/constants";
-import { injected } from "wagmi/connectors";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
@@ -33,8 +33,6 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
 // --- Navbar Component ---
 export function Navbar() {
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors } = useConnect();
-  const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -46,26 +44,6 @@ export function Navbar() {
       switchChain({ chainId: 421614 });
     }
   }, [isConnected, chainId, switchChain]);
-
-  const handleConnect = () => {
-    if (isConnected) {
-      disconnect();
-    } else {
-      const injectedConnector = connectors.find(c => c.id === 'injected');
-      const wcConnector = connectors.find(c => c.id === 'walletConnect');
-      
-      // Simple toggle for testing purposes
-      if (injectedConnector && wcConnector) {
-          const useMetaMask = window.confirm("Connect with MetaMask? \nClick OK for MetaMask.\nClick Cancel for WalletConnect / Other.");
-          const target = useMetaMask ? injectedConnector : wcConnector;
-          connect({ connector: target });
-      } else {
-          // Fallback
-          const connector = connectors[0];
-          if (connector) connect({ connector });
-      }
-    }
-  };
 
   if (!mounted) return null;
 
@@ -113,20 +91,7 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleConnect}
-              className="bg-[var(--primary)] text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:shadow-pink-300 transition-all active:scale-95 flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
-            >
-              <Icon
-                name="account_balance_wallet"
-                className="text-base sm:text-lg"
-              />
-              {isConnected && address
-                ? `${address.slice(0, 6)}...${address.slice(-4)}`
-                : "Connect"}
-            </motion.button>
+            <ConnectButton chainStatus="icon" showBalance={false} />
 
             {/* Mobile Menu Toggle */}
             <button

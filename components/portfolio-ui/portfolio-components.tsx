@@ -3,9 +3,59 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  usePublicClient,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useSwitchChain,
+} from "wagmi";
 import { parseUnits, formatUnits, encodeFunctionData } from "viem";
 import { CONTRACTS, ERC20_ABI, VAULT_ABI } from "@/constants";
+import { useTxGuard } from "@/components/tx-guard";
+
+type PublicClientLike = ReturnType<typeof usePublicClient>;
+
+async function getFeeOverrides(publicClient: PublicClientLike) {
+  if (!publicClient) return {};
+
+  try {
+    const [fees, block]: any = await Promise.all([
+      publicClient.estimateFeesPerGas(),
+      publicClient.getBlock({ blockTag: "latest" }),
+    ]);
+
+    const bump = (v: bigint, num: number) => (v * BigInt(num)) / BigInt(100);
+    const max = (a: bigint, b: bigint) => (a > b ? a : b);
+
+    const baseFee = (block?.baseFeePerGas as bigint | undefined) || BigInt(0);
+    const minPriority = (fees?.maxPriorityFeePerGas as bigint | undefined) || BigInt(1_000_000_000);
+    const minMaxFee = baseFee > BigInt(0)
+      ? baseFee * BigInt(2) + minPriority
+      : BigInt(0);
+
+    if (fees?.maxFeePerGas || fees?.maxPriorityFeePerGas) {
+      const maxPriorityFeePerGas = fees?.maxPriorityFeePerGas
+        ? max(bump(fees.maxPriorityFeePerGas as bigint, 120), minPriority)
+        : minPriority;
+
+      const maxFeePerGas = fees?.maxFeePerGas
+        ? max(bump(fees.maxFeePerGas as bigint, 120), minMaxFee)
+        : minMaxFee;
+
+      return { maxFeePerGas, maxPriorityFeePerGas };
+    }
+
+    if (fees?.gasPrice) {
+      return { gasPrice: bump(fees.gasPrice as bigint, 120) };
+    }
+
+    return {};
+  } catch {
+    return {};
+  }
+}
 
 // Declare ethereum on window for TypeScript
 declare global {
@@ -156,17 +206,31 @@ export function StatCard({
 // --- Faucet Card ---
 export function FaucetCard() {
   const { address, chainId } = useAccount();
+  const { busy, setBusy } = useTxGuard();
+  const publicClient = usePublicClient({ chainId: 421614 });
   const [selectedToken, setSelectedToken] = useState(AVAILABLE_TOKENS[0]);
   const { data: hash, writeContract, isPending: isWritePending, error: writeError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const isProcessing = isWritePending || isConfirming;
 
+  useEffect(() => {
+    if (!busy) return;
+    if (writeError) setBusy(false);
+  }, [busy, writeError, setBusy]);
+
+  useEffect(() => {
+    if (!busy) return;
+    if (isSuccess) setBusy(false);
+  }, [busy, isSuccess, setBusy]);
+
   const handleMint = async () => {
     if (!address) {
       alert("Please connect your wallet first");
       return;
     }
+
+    if (busy) return;
     
     // Ensure correct network
     if (chainId !== 421614) {
@@ -190,12 +254,14 @@ export function FaucetCard() {
     console.log(`[Mint] To: ${address}`);
     
     try {
+      setBusy(true);
+      const feeOverrides = await getFeeOverrides(publicClient);
       writeContract({
         address: tokenAddress,
         abi: ERC20_ABI,
         functionName: "mint",
         args: [address, mintAmount],
-        gas: BigInt(200000), // Reduced gas limit
+        ...feeOverrides,
       });
     } catch (err: any) {
       console.error("Mint Error:", err);
@@ -259,7 +325,7 @@ export function FaucetCard() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleMint}
-          disabled={isProcessing}
+          disabled={isProcessing || busy}
           className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-xl font-bold text-xs shadow-lg disabled:opacity-50"
         >
           {isProcessing ? (
@@ -278,6 +344,8 @@ export function FaucetCard() {
 // --- Fund Management ---
 export function FundManagement() {
   const { address, chainId } = useAccount();
+  const { busy, setBusy } = useTxGuard();
+  const publicClient = usePublicClient({ chainId: 421614 });
   const [mode, setMode] = useState<"DEPOSIT" | "WITHDRAW">("DEPOSIT");
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState("");
@@ -292,6 +360,16 @@ export function FundManagement() {
   });
 
   const isProcessing = isWritePending || isConfirming;
+
+  useEffect(() => {
+    if (!busy) return;
+    if (writeError) setBusy(false);
+  }, [busy, writeError, setBusy]);
+
+  useEffect(() => {
+    if (!busy) return;
+    if (isConfirmed) setBusy(false);
+  }, [busy, isConfirmed, setBusy]);
 
   // Check Allowance (Only relevant for Deposit)
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -332,6 +410,8 @@ export function FundManagement() {
   const handleApprove = async () => {
     if (!amount) return;
     if (!(await validateAndSwitchChain())) return;
+
+    if (busy) return;
     
     reset();
     setStep(2); // VISUAL: Move to Approve step immediately
@@ -339,12 +419,15 @@ export function FundManagement() {
     console.log(`[Approve] Token: ${tokenAddress}, Amount: ${amount}, Spender: ${vaultAddress}`);
     
     try {
+      setBusy(true);
+      const feeOverrides = await getFeeOverrides(publicClient);
       writeContract({
         address: tokenAddress,
         abi: ERC20_ABI,
         functionName: "approve",
         args: [vaultAddress, parseUnits(amount, selectedToken.decimals)],
         // REMOVED GAS LIMIT - Let MetaMask estimate
+        ...feeOverrides,
       });
     } catch (e: any) { 
       console.error("Approve Error:", e);
@@ -356,6 +439,8 @@ export function FundManagement() {
   const handleDeposit = async () => {
     if (!amount) return;
     if (!(await validateAndSwitchChain())) return;
+
+    if (busy) return;
     
     reset();
     setStep(3); 
@@ -363,12 +448,15 @@ export function FundManagement() {
     console.log(`[Deposit] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
     
     try {
+      setBusy(true);
+      const feeOverrides = await getFeeOverrides(publicClient);
       writeContract({
         address: vaultAddress,
         abi: VAULT_ABI,
         functionName: "deposit",
         args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
         // REMOVED GAS LIMIT
+        ...feeOverrides,
       });
     } catch (e: any) { 
       console.error("Deposit Error:", e);
@@ -380,18 +468,23 @@ export function FundManagement() {
   const handleWithdraw = async () => {
     if (!amount) return;
     if (!(await validateAndSwitchChain())) return;
+
+    if (busy) return;
     
     reset();
     
     console.log(`[Withdraw] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
     
     try {
+      setBusy(true);
+      const feeOverrides = await getFeeOverrides(publicClient);
       writeContract({
         address: vaultAddress,
         abi: VAULT_ABI,
         functionName: "withdraw",
         args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
         // REMOVED GAS LIMIT
+        ...feeOverrides,
       });
     } catch (e: any) { 
       console.error("Withdraw Error:", e);
@@ -537,9 +630,9 @@ export function FundManagement() {
                 <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={handleApprove}
-                disabled={isProcessing || !amount}
-                className={clsx(
+                 onClick={handleApprove}
+                 disabled={isProcessing || !amount || busy}
+                 className={clsx(
                 "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
                 !amount || isProcessing
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed"
@@ -558,9 +651,9 @@ export function FundManagement() {
                 <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={handleDeposit}
-                disabled={isProcessing || !amount}
-                className={clsx(
+                 onClick={handleDeposit}
+                 disabled={isProcessing || !amount || busy}
+                 className={clsx(
                     "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
                     !amount || isProcessing
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed"
@@ -580,9 +673,9 @@ export function FundManagement() {
             <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleWithdraw}
-            disabled={isProcessing || !amount}
-            className={clsx(
+             onClick={handleWithdraw}
+             disabled={isProcessing || !amount || busy}
+             className={clsx(
                 "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
                 !amount || isProcessing
                 ? "bg-slate-200 text-slate-400 cursor-not-allowed"
