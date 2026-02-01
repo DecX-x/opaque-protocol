@@ -344,12 +344,12 @@ export function FundManagement() {
         abi: ERC20_ABI,
         functionName: "approve",
         args: [vaultAddress, parseUnits(amount, selectedToken.decimals)],
-        gas: BigInt(500000), 
+        // REMOVED GAS LIMIT - Let MetaMask estimate
       });
     } catch (e: any) { 
       console.error("Approve Error:", e);
       alert(`Approve failed: ${e.message}`);
-      setStep(1); // Revert step on error
+      setStep(1); 
     }
   };
 
@@ -358,7 +358,7 @@ export function FundManagement() {
     if (!(await validateAndSwitchChain())) return;
     
     reset();
-    setStep(3); // VISUAL: Move to Deposit step immediately
+    setStep(3); 
     
     console.log(`[Deposit] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
     
@@ -368,12 +368,12 @@ export function FundManagement() {
         abi: VAULT_ABI,
         functionName: "deposit",
         args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
-        gas: BigInt(1000000),
+        // REMOVED GAS LIMIT
       });
     } catch (e: any) { 
       console.error("Deposit Error:", e);
       alert(`Deposit failed: ${e.message}`);
-      setStep(2); // Revert step on error (stay at approve/deposit boundary)
+      setStep(2); 
     }
   };
 
@@ -391,7 +391,7 @@ export function FundManagement() {
         abi: VAULT_ABI,
         functionName: "withdraw",
         args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
-        gas: BigInt(200000),
+        // REMOVED GAS LIMIT
       });
     } catch (e: any) { 
       console.error("Withdraw Error:", e);
