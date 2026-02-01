@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
 import { formatUnits } from "viem";
 import { CONTRACTS, ERC20_ABI } from "@/constants";
+import { injected } from "wagmi/connectors";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
