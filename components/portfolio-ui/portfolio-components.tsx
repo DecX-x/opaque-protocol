@@ -334,7 +334,7 @@ export function FundManagement() {
     if (!(await validateAndSwitchChain())) return;
     
     reset();
-    setStep(2);
+    setStep(2); // VISUAL: Move to Approve step immediately
     
     console.log(`[Approve] Token: ${tokenAddress}, Amount: ${amount}, Spender: ${vaultAddress}`);
     
@@ -344,11 +344,12 @@ export function FundManagement() {
         abi: ERC20_ABI,
         functionName: "approve",
         args: [vaultAddress, parseUnits(amount, selectedToken.decimals)],
-        gas: BigInt(100000),
+        gas: BigInt(500000), 
       });
     } catch (e: any) { 
       console.error("Approve Error:", e);
       alert(`Approve failed: ${e.message}`);
+      setStep(1); // Revert step on error
     }
   };
 
@@ -357,7 +358,7 @@ export function FundManagement() {
     if (!(await validateAndSwitchChain())) return;
     
     reset();
-    setStep(3);
+    setStep(3); // VISUAL: Move to Deposit step immediately
     
     console.log(`[Deposit] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
     
@@ -367,11 +368,12 @@ export function FundManagement() {
         abi: VAULT_ABI,
         functionName: "deposit",
         args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
-        gas: BigInt(200000),
+        gas: BigInt(1000000),
       });
     } catch (e: any) { 
       console.error("Deposit Error:", e);
       alert(`Deposit failed: ${e.message}`);
+      setStep(2); // Revert step on error (stay at approve/deposit boundary)
     }
   };
 
