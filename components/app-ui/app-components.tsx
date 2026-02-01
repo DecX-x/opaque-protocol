@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import Link from "next/link";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { injected } from "wagmi/connectors";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
@@ -28,8 +30,23 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
 
 // --- Navbar Component ---
 export function Navbar() {
-  const [isConnected, setIsConnected] = useState(false);
+  const { address, isConnected } = useAccount();
+  const { connect } = useConnect();
+  const { disconnect } = useDisconnect();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const handleConnect = () => {
+    if (isConnected) {
+      disconnect();
+    } else {
+      connect({ connector: injected() });
+    }
+  };
+
+  if (!mounted) return null;
 
   return (
     <nav className="fixed top-0 w-full z-50 px-4 sm:px-6 py-2 sm:py-4 pointer-events-none">
@@ -78,14 +95,16 @@ export function Navbar() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setIsConnected(!isConnected)}
+              onClick={handleConnect}
               className="bg-[var(--primary)] text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-full font-bold shadow-lg shadow-pink-200 hover:shadow-pink-300 transition-all active:scale-95 flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap"
             >
               <Icon
                 name="account_balance_wallet"
                 className="text-base sm:text-lg"
               />
-              {isConnected ? "0x82...39a1" : "Connect"}
+              {isConnected && address
+                ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                : "Connect"}
             </motion.button>
 
             {/* Mobile Menu Toggle */}
