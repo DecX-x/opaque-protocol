@@ -7,44 +7,56 @@ import {
   FundManagement,
   AssetTable,
   FaucetCard,
+  AVAILABLE_TOKENS,
 } from "../../../components/portfolio-ui/portfolio-components";
 import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits } from "viem";
-import { CONTRACTS, ERC20_ABI, VAULT_ABI } from "@/constants";
+import { CONTRACTS, ERC20_ABI, VAULT_ABI, ORACLE_ABI } from "@/constants";
 
 export default function PortfolioPage() {
   const { address } = useAccount();
-  
   const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
-  const usdcAddress = CONTRACTS.ARBITRUM_SEPOLIA.USDC as `0x${string}`;
-  const wethAddress = CONTRACTS.ARBITRUM_SEPOLIA.WETH as `0x${string}`;
+  const oracleAddress = CONTRACTS.ARBITRUM_SEPOLIA.ORACLE as `0x${string}`;
 
-  const { data } = useReadContracts({
-    contracts: [
-        // 0: Vault USDC Balance (TVL)
-        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [vaultAddress] },
-        // 1: Vault WETH Balance (TVL)
-        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [vaultAddress] },
-        // 2: User Wallet USDC
-        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address || '0x0000000000000000000000000000000000000000'] },
-        // 3: User Wallet WETH
-        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address || '0x0000000000000000000000000000000000000000'] },
-        // 4: User Vault USDC
-        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address || '0x0000000000000000000000000000000000000000', usdcAddress] },
-        // 5: User Vault WETH
-        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address || '0x0000000000000000000000000000000000000000', wethAddress] },
-    ]
+  // Dynamic Contract Calls
+  const contracts = AVAILABLE_TOKENS.flatMap((token) => {
+    const tokenAddr = CONTRACTS.ARBITRUM_SEPOLIA[token.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA] as `0x${string}`;
+    return [
+      // 0: Price (from Oracle)
+      { address: oracleAddress, abi: ORACLE_ABI, functionName: "getPrice", args: [tokenAddr] },
+      // 1: User Wallet Balance
+      { address: tokenAddr, abi: ERC20_ABI, functionName: "balanceOf", args: [address || "0x0000000000000000000000000000000000000000"] },
+      // 2: User Vault Balance
+      { address: vaultAddress, abi: VAULT_ABI, functionName: "balances", args: [address || "0x0000000000000000000000000000000000000000", tokenAddr] },
+      // 3: Vault TVL (Token Balance of Vault)
+      { address: tokenAddr, abi: ERC20_ABI, functionName: "balanceOf", args: [vaultAddress] },
+    ];
   });
 
-  const getVal = (index: number, decimals: number = 18) => 
-    data?.[index]?.result ? parseFloat(formatUnits(data[index].result as bigint, decimals)) : 0;
+  const { data } = useReadContracts({ contracts });
 
-  const ethPrice = 2450; // Mock Price for stats
-  
-  // Calc Stats
-  const tvl = getVal(0) + (getVal(1) * ethPrice);
-  const walletBal = getVal(2) + (getVal(3) * ethPrice);
-  const vaultBal = getVal(4) + (getVal(5) * ethPrice);
+  // Calculate Stats
+  let totalWallet = 0;
+  let totalVault = 0;
+  let totalTVL = 0;
+
+  AVAILABLE_TOKENS.forEach((token, i) => {
+    const baseIdx = i * 4;
+    const priceRaw = data?.[baseIdx]?.result as bigint;
+    const walletRaw = data?.[baseIdx + 1]?.result as bigint;
+    const vaultRaw = data?.[baseIdx + 2]?.result as bigint;
+    const tvlRaw = data?.[baseIdx + 3]?.result as bigint;
+
+    // Price is 8 decimals. Tokens are token.decimals.
+    const price = priceRaw ? parseFloat(formatUnits(priceRaw, 8)) : 0;
+    const wallet = walletRaw ? parseFloat(formatUnits(walletRaw, token.decimals)) : 0;
+    const vault = vaultRaw ? parseFloat(formatUnits(vaultRaw, token.decimals)) : 0;
+    const tvl = tvlRaw ? parseFloat(formatUnits(tvlRaw, token.decimals)) : 0;
+
+    totalWallet += wallet * price;
+    totalVault += vault * price;
+    totalTVL += tvl * price;
+  });
 
   return (
     <div className="min-h-screen bg-[var(--bg-light)] text-slate-800 font-sans selection:bg-[var(--primary)] selection:text-white pb-20 overflow-x-hidden">
@@ -62,10 +74,10 @@ export default function PortfolioPage() {
             iconColor="text-blue-500"
             iconBg="bg-blue-500/10"
             label="Global Liquidity"
-            value={`$${tvl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+            value={`$${totalTVL.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="GLOBAL"
             badgeColor="text-blue-500 bg-blue-500/10"
-            trend="Live TVL"
+            trend="Live Oracle"
             trendPositive
           />
           <StatCard
@@ -73,7 +85,7 @@ export default function PortfolioPage() {
             iconColor="text-[var(--primary)]"
             iconBg="bg-[var(--primary)]/10"
             label="Your Wallet"
-            value={`$${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+            value={`$${totalWallet.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="EXTERNAL"
             badgeColor="text-[var(--primary)] bg-[var(--primary)]/10"
             progressBar
@@ -83,7 +95,7 @@ export default function PortfolioPage() {
             iconColor="text-[var(--secondary)]"
             iconBg="bg-[var(--secondary)]/10"
             label="Dark Pool Balance"
-            value={`$${vaultBal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+            value={`$${totalVault.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
             badge="PRIVATE"
             badgeColor="text-[var(--secondary)] bg-[var(--secondary)]/10"
             isPrivate

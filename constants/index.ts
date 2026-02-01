@@ -2,9 +2,13 @@ import { parseAbi } from "viem";
 
 export const CONTRACTS = {
   ARBITRUM_SEPOLIA: {
-    USDC: "0x7568f9E2D79eB7fE4396BC78fbB63303d984901A",
-    WETH: "0xd694475B5c7D2610dfcBc9F3ea83377A3ac4C5BB",
-    VAULT: "0xe12188789Ca4Ddf15dD683993c91aD5C391a7f70",
+    USDC: "0xaB11C99BdfeEbd8DaE856B2198222091b09d3b9d",
+    WETH: "0x12A863f8c557a4cf93BD872Dc1CA9F4aD2EbDB64",
+    WBTC: "0xCE92A00Fe30FD461d7d800dDC1657e2436acF581",
+    LINK: "0x9321436d7C2114D1707268F617a5D9b95cd548b1",
+    SOL: "0x5A32446d6790234d8f504bc0bF3eD22F10662A34",
+    VAULT: "0x1E3Dfb508CadbFAa60c913876Bd4766c30E56562",
+    ORACLE: "0x74425Dd6Cf65BAbDFb83AAe69550C0B4C065FB7c",
   },
   IEXEC: {
     IAPP_ADDRESS: "0x16Fb8368B1C6CD5C4727Ca3051Ea98695C80236C",
@@ -24,4 +28,8 @@ export const ERC20_ABI = parseAbi([
   "function allowance(address owner, address spender) external view returns (uint256)",
   "function balanceOf(address account) external view returns (uint256)",
   "function mint(address to, uint256 amount) external" 
+]);
+
+export const ORACLE_ABI = parseAbi([
+  "function getPrice(address token) external view returns (uint256)"
 ]);

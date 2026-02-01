@@ -33,7 +33,7 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
 // --- Navbar Component ---
 export function Navbar() {
   const { address, isConnected, chainId } = useAccount();
-  const { connect } = useConnect();
+  const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -51,7 +51,10 @@ export function Navbar() {
     if (isConnected) {
       disconnect();
     } else {
-      connect({ connector: injected() });
+      const connector = connectors[0];
+      if (connector) {
+        connect({ connector });
+      }
     }
   };
 

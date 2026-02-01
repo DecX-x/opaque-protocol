@@ -3,9 +3,61 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits, formatUnits } from "viem";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from "wagmi";
+import { parseUnits, formatUnits, encodeFunctionData } from "viem";
 import { CONTRACTS, ERC20_ABI, VAULT_ABI } from "@/constants";
+
+// Declare ethereum on window for TypeScript
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
+export const AVAILABLE_TOKENS = [
+  { symbol: "USDC", name: "USD Coin", logo: "$", color: "bg-blue-500", decimals: 18 },
+  { symbol: "WETH", name: "Wrapped Ether", logo: "Ξ", color: "bg-indigo-500", decimals: 18 },
+  { symbol: "WBTC", name: "Wrapped BTC", logo: "₿", color: "bg-orange-500", decimals: 18 },
+  { symbol: "LINK", name: "Chainlink", logo: "⬡", color: "bg-blue-600", decimals: 18 },
+  { symbol: "SOL", name: "Solana", logo: "◎", color: "bg-purple-500", decimals: 18 },
+];
+
+// Helper to add/switch to Arbitrum Sepolia with correct RPC
+async function ensureArbitrumSepolia(): Promise<boolean> {
+  if (!window.ethereum) return false;
+  
+  const chainId = "0x66eee"; // 421614 in hex
+  
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId }],
+    });
+    return true;
+  } catch (switchError: any) {
+    // Chain not added yet
+    if (switchError.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId,
+            chainName: "Arbitrum Sepolia",
+            nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+            rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc"],
+            blockExplorerUrls: ["https://sepolia.arbiscan.io"],
+          }],
+        });
+        return true;
+      } catch (addError) {
+        console.error("Failed to add chain:", addError);
+        return false;
+      }
+    }
+    console.error("Failed to switch chain:", switchError);
+    return false;
+  }
+}
 
 // --- Icons (Material Symbols wrapper) ---
 const Icon = ({ name, className }: { name: string; className?: string }) => (
@@ -104,29 +156,50 @@ export function StatCard({
 // --- Faucet Card ---
 export function FaucetCard() {
   const { address, chainId } = useAccount();
-  const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
-  const { data: hash, writeContract, isPending: isWritePending, error: writeError } = useWriteContract();
+  const [selectedToken, setSelectedToken] = useState(AVAILABLE_TOKENS[0]);
+  const { data: hash, writeContract, isPending: isWritePending, error: writeError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const isProcessing = isWritePending || isConfirming;
 
-  const handleMint = () => {
-    if (!address) return;
-    if (chainId !== 421614) {
-        alert("Please switch to Arbitrum Sepolia");
-        return;
+  const handleMint = async () => {
+    if (!address) {
+      alert("Please connect your wallet first");
+      return;
     }
     
+    // Ensure correct network
+    if (chainId !== 421614) {
+      const switched = await ensureArbitrumSepolia();
+      if (!switched) {
+        alert("Please switch to Arbitrum Sepolia manually in MetaMask");
+        return;
+      }
+      // Wait a bit for the chain switch to propagate
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    
+    // Reset previous errors
+    reset();
+    
+    const tokenAddress = CONTRACTS.ARBITRUM_SEPOLIA[selectedToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA] as `0x${string}`;
+    const mintAmount = parseUnits("1000", selectedToken.decimals);
+    
+    console.log(`[Mint] Token: ${selectedToken.symbol} (${tokenAddress})`);
+    console.log(`[Mint] Amount: ${mintAmount.toString()}`);
+    console.log(`[Mint] To: ${address}`);
+    
     try {
-        console.log(`Minting ${tokenSymbol} to ${address}...`);
-        writeContract({
-            address: CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: "mint",
-            args: [address, parseUnits("1000", 18)],
-        });
-    } catch (err) {
-        console.error("Mint Error:", err);
+      writeContract({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: "mint",
+        args: [address, mintAmount],
+        gas: BigInt(200000), // Reduced gas limit
+      });
+    } catch (err: any) {
+      console.error("Mint Error:", err);
+      alert(`Mint failed: ${err.message}`);
     }
   };
 
@@ -153,37 +226,48 @@ export function FaucetCard() {
             {writeError.message.slice(0, 100)}...
         </div>
       )}
+      
+      {hash && (
+        <a 
+          href={`https://sepolia.arbiscan.io/tx/${hash}`} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="mb-4 text-xs text-blue-500 hover:text-blue-600 underline block text-center font-bold"
+        >
+            View on Arbiscan ↗
+        </a>
+      )}
 
-      <div className="flex gap-3">
-        <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 flex relative">
-           <div className="absolute inset-y-1 w-1/2 bg-white dark:bg-slate-700 shadow-sm rounded-lg transition-all" 
-                style={{ left: tokenSymbol === "USDC" ? "4px" : "calc(50% - 4px)" }} />
-           <button 
-             onClick={() => setTokenSymbol("USDC")}
-             className="flex-1 relative z-10 text-xs font-bold py-2 text-center"
-           >
-             USDC
-           </button>
-           <button 
-             onClick={() => setTokenSymbol("WETH")}
-             className="flex-1 relative z-10 text-xs font-bold py-2 text-center"
-           >
-             WETH
-           </button>
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+           {AVAILABLE_TOKENS.map((token) => (
+               <button
+                 key={token.symbol}
+                 onClick={() => setSelectedToken(token)}
+                 className={clsx(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                    selectedToken.symbol === token.symbol 
+                        ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20" 
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
+                 )}
+               >
+                 {token.symbol}
+               </button>
+           ))}
         </div>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleMint}
           disabled={isProcessing}
-          className="flex-1 bg-purple-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-purple-500/20 disabled:opacity-50"
+          className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-xl font-bold text-xs shadow-lg disabled:opacity-50"
         >
           {isProcessing ? (
-             <span className="flex items-center justify-center gap-1"><Icon name="sync" className="animate-spin text-sm" /> Minting...</span>
+             <span className="flex items-center justify-center gap-1"><Icon name="sync" className="animate-spin text-sm" /> Minting {selectedToken.symbol}...</span>
           ) : isSuccess ? (
              <span className="flex items-center justify-center gap-1"><Icon name="check" className="text-sm" /> Done</span>
           ) : (
-             "Mint 1000"
+             `Mint 1000 ${selectedToken.symbol}`
           )}
         </motion.button>
       </div>
@@ -197,12 +281,12 @@ export function FundManagement() {
   const [mode, setMode] = useState<"DEPOSIT" | "WITHDRAW">("DEPOSIT");
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState("");
-  const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
+  const [selectedToken, setSelectedToken] = useState(AVAILABLE_TOKENS[0]);
   
-  const tokenAddress = CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`;
+  const tokenAddress = CONTRACTS.ARBITRUM_SEPOLIA[selectedToken.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA] as `0x${string}`;
   const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
 
-  const { data: hash, writeContract, isPending: isWritePending, error: writeError } = useWriteContract();
+  const { data: hash, writeContract, isPending: isWritePending, error: writeError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash,
   });
@@ -233,53 +317,87 @@ export function FundManagement() {
     }
   }, [isConfirmed, step, mode, refetchAllowance]);
 
-  const validateChain = () => {
-      if (chainId !== 421614) {
-          alert("Please switch to Arbitrum Sepolia");
-          return false;
+  const validateAndSwitchChain = async (): Promise<boolean> => {
+    if (chainId !== 421614) {
+      const switched = await ensureArbitrumSepolia();
+      if (!switched) {
+        alert("Please switch to Arbitrum Sepolia manually in MetaMask");
+        return false;
       }
-      return true;
-  }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return true;
+  };
 
-  const handleApprove = () => {
-    if (!amount || !validateChain()) return;
+  const handleApprove = async () => {
+    if (!amount) return;
+    if (!(await validateAndSwitchChain())) return;
+    
+    reset();
     setStep(2);
+    
+    console.log(`[Approve] Token: ${tokenAddress}, Amount: ${amount}, Spender: ${vaultAddress}`);
+    
     try {
-        writeContract({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: "approve",
-            args: [vaultAddress, parseUnits(amount, 18)],
-        });
-    } catch (e) { console.error(e); }
+      writeContract({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [vaultAddress, parseUnits(amount, selectedToken.decimals)],
+        gas: BigInt(100000),
+      });
+    } catch (e: any) { 
+      console.error("Approve Error:", e);
+      alert(`Approve failed: ${e.message}`);
+    }
   };
 
-  const handleDeposit = () => {
-    if (!amount || !validateChain()) return;
+  const handleDeposit = async () => {
+    if (!amount) return;
+    if (!(await validateAndSwitchChain())) return;
+    
+    reset();
     setStep(3);
+    
+    console.log(`[Deposit] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
+    
     try {
-        writeContract({
-            address: vaultAddress,
-            abi: VAULT_ABI,
-            functionName: "deposit",
-            args: [tokenAddress, parseUnits(amount, 18)],
-        });
-    } catch (e) { console.error(e); }
+      writeContract({
+        address: vaultAddress,
+        abi: VAULT_ABI,
+        functionName: "deposit",
+        args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
+        gas: BigInt(200000),
+      });
+    } catch (e: any) { 
+      console.error("Deposit Error:", e);
+      alert(`Deposit failed: ${e.message}`);
+    }
   };
 
-  const handleWithdraw = () => {
-    if (!amount || !validateChain()) return;
+  const handleWithdraw = async () => {
+    if (!amount) return;
+    if (!(await validateAndSwitchChain())) return;
+    
+    reset();
+    
+    console.log(`[Withdraw] Token: ${tokenAddress}, Amount: ${amount}, Vault: ${vaultAddress}`);
+    
     try {
-        writeContract({
-            address: vaultAddress,
-            abi: VAULT_ABI,
-            functionName: "withdraw",
-            args: [tokenAddress, parseUnits(amount, 18)],
-        });
-    } catch (e) { console.error(e); }
+      writeContract({
+        address: vaultAddress,
+        abi: VAULT_ABI,
+        functionName: "withdraw",
+        args: [tokenAddress, parseUnits(amount, selectedToken.decimals)],
+        gas: BigInt(200000),
+      });
+    } catch (e: any) { 
+      console.error("Withdraw Error:", e);
+      alert(`Withdraw failed: ${e.message}`);
+    }
   };
 
-  const parsedAmount = amount ? parseUnits(amount, 18) : BigInt(0);
+  const parsedAmount = amount ? parseUnits(amount, selectedToken.decimals) : BigInt(0);
   const currentAllowance = allowance ? (allowance as bigint) : BigInt(0);
   const needsApproval = mode === "DEPOSIT" && currentAllowance < parsedAmount;
 
@@ -302,6 +420,17 @@ export function FundManagement() {
         <div className="mb-4 p-3 bg-red-100 text-red-600 text-xs rounded-xl break-all">
             Error: {writeError.message.slice(0, 100)}...
         </div>
+      )}
+
+      {hash && (
+        <a 
+          href={`https://sepolia.arbiscan.io/tx/${hash}`} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="mb-4 text-xs text-blue-500 hover:text-blue-600 underline block text-center font-bold"
+        >
+            View on Arbiscan ↗
+        </a>
       )}
 
       {/* Tabs */}
@@ -377,15 +506,27 @@ export function FundManagement() {
               placeholder="0.0"
               type="number"
             />
-            <button 
-                onClick={() => setTokenSymbol(tokenSymbol === "USDC" ? "WETH" : "USDC")}
-                className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl border border-slate-600 hover:border-[var(--secondary)] transition-colors"
-            >
-              <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[8px] font-bold">
-                {tokenSymbol === "WETH" ? "Ξ" : "$"}
-              </div>
-              <span className="font-bold text-sm">{tokenSymbol}</span>
-            </button>
+            {/* Token Selector */}
+            <div className="relative group">
+                <button className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl border border-slate-600 hover:border-[var(--secondary)] transition-colors">
+                    <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[8px] font-bold">
+                        {selectedToken.logo}
+                    </div>
+                    <span className="font-bold text-sm">{selectedToken.symbol}</span>
+                </button>
+                {/* Dropdown */}
+                <div className="absolute right-0 bottom-full mb-2 w-32 bg-slate-800 rounded-xl border border-slate-700 shadow-xl hidden group-hover:block z-20">
+                    {AVAILABLE_TOKENS.map(t => (
+                        <button 
+                            key={t.symbol}
+                            onClick={() => setSelectedToken(t)}
+                            className="w-full text-left px-4 py-2 hover:bg-slate-700 first:rounded-t-xl last:rounded-b-xl flex items-center gap-2 text-white text-xs font-bold"
+                        >
+                            <span>{t.logo}</span> {t.symbol}
+                        </button>
+                    ))}
+                </div>
+            </div>
           </div>
         </div>
         
@@ -515,11 +656,6 @@ export function AssetTable() {
   const { address } = useAccount();
   const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
   
-  const tokens = [
-    { symbol: "WETH", address: CONTRACTS.ARBITRUM_SEPOLIA.WETH, logo: "Ξ", color: "bg-indigo-500", decimals: 18 },
-    { symbol: "USDC", address: CONTRACTS.ARBITRUM_SEPOLIA.USDC, logo: "$", color: "bg-blue-500", decimals: 18 },
-  ];
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -548,10 +684,13 @@ export function AssetTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {tokens.map((token, i) => (
+            {AVAILABLE_TOKENS.map((token, i) => (
               <AssetRow 
                 key={token.symbol} 
-                token={token} 
+                token={{ 
+                    ...token, 
+                    address: CONTRACTS.ARBITRUM_SEPOLIA[token.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA] 
+                }} 
                 index={i} 
                 userAddress={address} 
                 vaultAddress={vaultAddress} 
