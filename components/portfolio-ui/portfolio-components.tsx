@@ -103,19 +103,31 @@ export function StatCard({
 
 // --- Faucet Card ---
 export function FaucetCard() {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
   const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
-  const { data: hash, writeContract } = useWriteContract();
-  const { isLoading, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { data: hash, writeContract, isPending: isWritePending, error: writeError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const isProcessing = isWritePending || isConfirming;
 
   const handleMint = () => {
     if (!address) return;
-    writeContract({
-      address: CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`,
-      abi: ERC20_ABI,
-      functionName: "mint",
-      args: [address, parseUnits("1000", 18)],
-    });
+    if (chainId !== 421614) {
+        alert("Please switch to Arbitrum Sepolia");
+        return;
+    }
+    
+    try {
+        console.log(`Minting ${tokenSymbol} to ${address}...`);
+        writeContract({
+            address: CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: "mint",
+            args: [address, parseUnits("1000", 18)],
+        });
+    } catch (err) {
+        console.error("Mint Error:", err);
+    }
   };
 
   return (
@@ -135,6 +147,12 @@ export function FaucetCard() {
           </div>
         </div>
       </div>
+
+      {writeError && (
+        <div className="mb-4 p-3 bg-red-100 text-red-600 text-xs rounded-xl break-all">
+            {writeError.message.slice(0, 100)}...
+        </div>
+      )}
 
       <div className="flex gap-3">
         <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1 flex relative">
@@ -157,11 +175,11 @@ export function FaucetCard() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleMint}
-          disabled={isLoading}
+          disabled={isProcessing}
           className="flex-1 bg-purple-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-purple-500/20 disabled:opacity-50"
         >
-          {isLoading ? (
-             <span className="flex items-center justify-center gap-1"><Icon name="sync" className="animate-spin text-sm" /> Minting</span>
+          {isProcessing ? (
+             <span className="flex items-center justify-center gap-1"><Icon name="sync" className="animate-spin text-sm" /> Minting...</span>
           ) : isSuccess ? (
              <span className="flex items-center justify-center gap-1"><Icon name="check" className="text-sm" /> Done</span>
           ) : (
