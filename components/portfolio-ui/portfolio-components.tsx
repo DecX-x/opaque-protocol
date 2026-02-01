@@ -172,8 +172,8 @@ export function FundManagement() {
     });
   };
 
-  const parsedAmount = amount ? parseUnits(amount, 18) : 0n;
-  const currentAllowance = allowance ? (allowance as bigint) : 0n;
+  const parsedAmount = amount ? parseUnits(amount, 18) : BigInt(0);
+  const currentAllowance = allowance ? (allowance as bigint) : BigInt(0);
   const needsApproval = currentAllowance < parsedAmount;
 
   return (
