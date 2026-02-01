@@ -51,9 +51,18 @@ export function Navbar() {
     if (isConnected) {
       disconnect();
     } else {
-      const connector = connectors[0];
-      if (connector) {
-        connect({ connector });
+      const injectedConnector = connectors.find(c => c.id === 'injected');
+      const wcConnector = connectors.find(c => c.id === 'walletConnect');
+      
+      // Simple toggle for testing purposes
+      if (injectedConnector && wcConnector) {
+          const useMetaMask = window.confirm("Connect with MetaMask? \nClick OK for MetaMask.\nClick Cancel for WalletConnect / Other.");
+          const target = useMetaMask ? injectedConnector : wcConnector;
+          connect({ connector: target });
+      } else {
+          // Fallback
+          const connector = connectors[0];
+          if (connector) connect({ connector });
       }
     }
   };

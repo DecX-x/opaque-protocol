@@ -3,7 +3,7 @@
 import { WagmiProvider, createConfig, http, fallback } from "wagmi";
 import { arbitrumSepolia } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect, coinbaseWallet } from "wagmi/connectors";
 
 // Multiple RPC URLs for reliability and load balancing
 const ARBITRUM_SEPOLIA_RPCS = [
@@ -14,19 +14,26 @@ const ARBITRUM_SEPOLIA_RPCS = [
   "https://arbitrum-sepolia.access-nodes.com",
 ];
 
+// Project ID for WalletConnect (Free tier for testing)
+const projectId = "3fcc6bba6f1d54ca1b280a671a73815c";
+
 const config = createConfig({
   chains: [arbitrumSepolia],
   transports: {
     [arbitrumSepolia.id]: fallback(
       ARBITRUM_SEPOLIA_RPCS.map((url) => http(url, { 
-        timeout: 60_000, // Longer timeout
-        retryCount: 5,   // More retries
-        retryDelay: 2000 // Wait 2s between retries
+        timeout: 60_000, 
+        retryCount: 5,   
+        retryDelay: 2000 
       })),
-      { rank: true } // Automatically choose the fastest/healthiest RPC
+      { rank: true } 
     ),
   },
-  connectors: [injected()],
+  connectors: [
+    injected(),
+    walletConnect({ projectId }),
+    coinbaseWallet({ appName: "Opaque Protocol" }),
+  ],
 });
 
 const queryClient = new QueryClient();
