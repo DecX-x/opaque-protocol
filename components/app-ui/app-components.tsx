@@ -517,6 +517,23 @@ export function TradingPanel({
 
         {/* Inputs */}
         <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-2">
+            {quickTokens.map((token) => (
+              <button
+                key={token.symbol}
+                type="button"
+                onClick={() => setPayToken(token)}
+                className={clsx(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors",
+                  payToken.symbol === token.symbol
+                    ? "bg-[var(--secondary)]/15 text-[var(--secondary)] border-[var(--secondary)]/40"
+                    : "bg-white/70 text-slate-500 border-slate-100 hover:text-slate-700"
+                )}
+              >
+                Pay {token.symbol}
+              </button>
+            ))}
+          </div>
           <InputGroup
             label="You Pay (Dark Pool)"
             value={amount}
