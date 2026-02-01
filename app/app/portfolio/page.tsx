@@ -26,13 +26,13 @@ export default function PortfolioPage() {
         // 1: Vault WETH Balance (TVL)
         { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [vaultAddress] },
         // 2: User Wallet USDC
-        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address] },
+        { address: usdcAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address || '0x0000000000000000000000000000000000000000'] },
         // 3: User Wallet WETH
-        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address] },
+        { address: wethAddress, abi: ERC20_ABI, functionName: 'balanceOf', args: [address || '0x0000000000000000000000000000000000000000'] },
         // 4: User Vault USDC
-        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address, usdcAddress] },
+        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address || '0x0000000000000000000000000000000000000000', usdcAddress] },
         // 5: User Vault WETH
-        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address, wethAddress] },
+        { address: vaultAddress, abi: VAULT_ABI, functionName: 'balances', args: [address || '0x0000000000000000000000000000000000000000', wethAddress] },
     ]
   });
 

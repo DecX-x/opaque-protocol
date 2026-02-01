@@ -214,7 +214,7 @@ export function FundManagement() {
     address: tokenAddress,
     abi: ERC20_ABI,
     functionName: "allowance",
-    args: [address, vaultAddress],
+    args: [address || '0x0000000000000000000000000000000000000000', vaultAddress],
   });
 
   useEffect(() => {
@@ -570,7 +570,7 @@ function AssetRow({ token, index, userAddress, vaultAddress }: { token: any, ind
     address: token.address as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
-    args: [userAddress],
+    args: [userAddress || '0x0000000000000000000000000000000000000000'],
   });
 
   // Vault Balance
@@ -578,7 +578,7 @@ function AssetRow({ token, index, userAddress, vaultAddress }: { token: any, ind
     address: vaultAddress,
     abi: VAULT_ABI,
     functionName: "balances",
-    args: [userAddress, token.address],
+    args: [userAddress || '0x0000000000000000000000000000000000000000', token.address],
   });
 
   return (
