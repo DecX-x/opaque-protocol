@@ -206,7 +206,7 @@ export function MarketStats() {
       {/* Price Card */}
       <div
         className="glass p-6 rounded-2xl cursor-pointer relative"
-        onClick={() => setIsPriceListOpen((v) => !v)}
+        onClick={() => setIsPriceListOpen(true)}
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -253,83 +253,74 @@ export function MarketStats() {
           ))}
         </div>
 
-        <AnimatePresence>
-          {isPriceListOpen && (
+      </div>
+
+      <AnimatePresence>
+        {isPriceListOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsPriceListOpen(false)}
+            />
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              className="absolute left-6 right-6 top-full mt-3 bg-white/90 backdrop-blur rounded-2xl border border-slate-100 shadow-xl p-4 z-20"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="absolute left-1/2 top-24 w-[92%] max-w-3xl -translate-x-1/2 rounded-3xl bg-white shadow-2xl border border-slate-100 p-6"
             >
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-lg font-bold">Live Oracle Prices</div>
+                  <div className="text-xs text-slate-400">
+                    Updated every 8 seconds
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsPriceListOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-100"
+                >
+                  <Icon name="close" className="text-xl text-slate-400" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {AVAILABLE_TOKENS.map((token, idx) => {
                   const priceRaw = oraclePrices?.[idx]?.result as bigint | undefined;
                   const price = priceRaw ? formatUnits(priceRaw, 8) : "0";
                   return (
                     <div
                       key={token.symbol}
-                      className="flex items-center justify-between bg-white rounded-xl border border-slate-100 px-3 py-2"
+                      className="flex items-center justify-between bg-slate-50 rounded-2xl border border-slate-100 px-4 py-3"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-500">{token.logo}</span>
-                        <span className="text-xs font-bold">{token.symbol}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                          {token.logo}
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold">{token.symbol}</div>
+                          <div className="text-xs text-slate-400">{token.name}</div>
+                        </div>
                       </div>
-                      <span className="text-xs font-semibold text-slate-600">
-                        ${parseFloat(price).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                      </span>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold">
+                          ${parseFloat(price).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </div>
+                        <div className="text-[10px] text-slate-400">Oracle</div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Privacy Status */}
-      <div className="glass p-6 rounded-2xl bg-gradient-to-br from-[var(--accent)]/30 to-white/10">
-        <h3 className="font-bold mb-4 flex items-center gap-2">
-          <Icon name="security" className="text-[var(--primary)]" />
-          Privacy Status
-        </h3>
-        <div className="space-y-4">
-          <StatusRow label="TEE Verification" value="PASSED" success />
-          <StatusRow label="Anonymity Set" value="1,429 Participants" />
-          <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: "85%" }}
-              transition={{ duration: 1, delay: 0.5 }}
-              className="bg-[var(--secondary)] h-full rounded-full"
-            />
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function StatusRow({
-  label,
-  value,
-  success,
-}: {
-  label: string;
-  value: string;
-  success?: boolean;
-}) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span
-        className={clsx(
-          "font-mono font-medium",
-          success ? "text-green-500" : "text-slate-700"
+          </motion.div>
         )}
-      >
-        {value}
-      </span>
-    </div>
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -346,6 +337,33 @@ export function TradingPanel({
   const [status, setStatus] = useState<OrderStatus>("IDLE");
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
+  const [tokenPicker, setTokenPicker] = useState<{
+    open: boolean;
+    type: "pay" | "receive";
+  }>({ open: false, type: "pay" });
+
+  const oracleAddress = CONTRACTS.ARBITRUM_SEPOLIA.ORACLE as `0x${string}`;
+  const oracleContracts = useMemo(
+    () =>
+      AVAILABLE_TOKENS.map((token) => {
+        const tokenAddr =
+          CONTRACTS.ARBITRUM_SEPOLIA[
+            token.symbol as keyof typeof CONTRACTS.ARBITRUM_SEPOLIA
+          ] as `0x${string}`;
+        return {
+          address: oracleAddress,
+          abi: ORACLE_ABI,
+          functionName: "getPrice",
+          args: [tokenAddr],
+        };
+      }),
+    [oracleAddress]
+  );
+
+  const { data: oraclePrices } = useReadContracts({
+    contracts: oracleContracts,
+    query: { refetchInterval: 8000 },
+  });
 
   const payTokenAddress =
     CONTRACTS.ARBITRUM_SEPOLIA[
@@ -367,6 +385,21 @@ export function TradingPanel({
 
   const quickTokens = AVAILABLE_TOKENS.slice(0, 5);
 
+  const getOraclePrice = (symbol: string) => {
+    const idx = AVAILABLE_TOKENS.findIndex((t) => t.symbol === symbol);
+    const raw = oraclePrices?.[idx]?.result as bigint | undefined;
+    return raw ? parseFloat(formatUnits(raw, 8)) : 0;
+  };
+
+  useEffect(() => {
+    const payUsd = getOraclePrice(payToken.symbol);
+    const receiveUsd = getOraclePrice(receiveToken.symbol);
+    if (!payUsd || !receiveUsd) return;
+    const oraclePrice = receiveUsd / payUsd;
+    const display = oraclePrice.toFixed(6);
+    setPrice(display);
+  }, [oraclePrices, payToken.symbol, receiveToken.symbol]);
+
   const handlePayTokenSelect = (token: (typeof AVAILABLE_TOKENS)[number]) => {
     setPayToken(token);
     if (token.symbol === receiveToken.symbol) {
@@ -387,6 +420,10 @@ export function TradingPanel({
       );
       if (fallback) setPayToken(fallback);
     }
+  };
+
+  const openTokenPicker = (type: "pay" | "receive") => {
+    setTokenPicker({ open: true, type });
   };
 
   const swapTokens = () => {
@@ -540,23 +577,6 @@ export function TradingPanel({
 
         {/* Inputs */}
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {quickTokens.map((token) => (
-              <button
-                key={token.symbol}
-                type="button"
-                onClick={() => handlePayTokenSelect(token)}
-                className={clsx(
-                  "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors",
-                  payToken.symbol === token.symbol
-                    ? "bg-[var(--secondary)]/15 text-[var(--secondary)] border-[var(--secondary)]/40"
-                    : "bg-white/70 text-slate-500 border-slate-100 hover:text-slate-700"
-                )}
-              >
-                Pay {token.symbol}
-              </button>
-            ))}
-          </div>
           <InputGroup
             label="You Pay (Dark Pool)"
             value={amount}
@@ -578,29 +598,47 @@ export function TradingPanel({
           </div>
 
           <InputGroup
-            label="Limit Price"
+            label="Limit Price (Oracle)"
             value={price}
             onChange={setPrice}
             placeholder="0.00"
             ticker={`${payToken.symbol} per ${receiveToken.symbol}`}
+            readOnly
           />
 
-          <div className="flex flex-wrap items-center gap-2 justify-center">
-            {quickTokens.map((token) => (
-              <button
-                key={token.symbol}
-                type="button"
-                onClick={() => handleReceiveTokenSelect(token)}
-                className={clsx(
-                  "px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors",
-                  receiveToken.symbol === token.symbol
-                    ? "bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/40"
-                    : "bg-white/70 text-slate-500 border-slate-100 hover:text-slate-700"
-                )}
-              >
-                Receive {token.symbol}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => openTokenPicker("pay")}
+              className="flex-1 bg-white rounded-2xl border border-slate-100 px-4 py-3 flex items-center justify-between hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                  {payToken.logo}
+                </div>
+                <div className="text-left">
+                  <div className="text-xs text-slate-400">Pay</div>
+                  <div className="text-sm font-bold">{payToken.symbol}</div>
+                </div>
+              </div>
+              <Icon name="expand_more" className="text-slate-400" />
+            </button>
+            <button
+              type="button"
+              onClick={() => openTokenPicker("receive")}
+              className="flex-1 bg-white rounded-2xl border border-slate-100 px-4 py-3 flex items-center justify-between hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                  {receiveToken.logo}
+                </div>
+                <div className="text-left">
+                  <div className="text-xs text-slate-400">Receive</div>
+                  <div className="text-sm font-bold">{receiveToken.symbol}</div>
+                </div>
+              </div>
+              <Icon name="expand_more" className="text-slate-400" />
+            </button>
           </div>
 
           {/* Action Button */}
@@ -677,7 +715,120 @@ export function TradingPanel({
           </p>
         </div>
       </div>
+      <TokenPickerModal
+        open={tokenPicker.open}
+        type={tokenPicker.type}
+        tokens={AVAILABLE_TOKENS}
+        onClose={() => setTokenPicker({ ...tokenPicker, open: false })}
+        onSelect={(token) =>
+          tokenPicker.type === "pay"
+            ? handlePayTokenSelect(token)
+            : handleReceiveTokenSelect(token)
+        }
+      />
     </motion.div>
+  );
+}
+
+function TokenPickerModal({
+  open,
+  type,
+  tokens,
+  onClose,
+  onSelect,
+}: {
+  open: boolean;
+  type: "pay" | "receive";
+  tokens: typeof AVAILABLE_TOKENS;
+  onClose: () => void;
+  onSelect: (token: (typeof AVAILABLE_TOKENS)[number]) => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  const filtered = tokens.filter((token) => {
+    const q = query.toLowerCase();
+    return (
+      token.symbol.toLowerCase().includes(q) ||
+      token.name.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50"
+        >
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 24, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute left-1/2 top-24 w-[92%] max-w-xl -translate-x-1/2 rounded-3xl bg-white shadow-2xl border border-slate-100 p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-lg font-bold">
+                  Select token to {type === "pay" ? "pay" : "receive"}
+                </div>
+                <div className="text-xs text-slate-400">
+                  Search by name or symbol
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-xl text-slate-400" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search tokens"
+                className="w-full rounded-2xl border border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 focus:outline-none focus:border-[var(--secondary)]"
+              />
+            </div>
+            <div className="max-h-[360px] overflow-auto space-y-2">
+              {filtered.map((token) => (
+                <button
+                  key={token.symbol}
+                  onClick={() => {
+                    onSelect(token);
+                    onClose();
+                  }}
+                  className="w-full flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3 hover:bg-slate-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                      {token.logo}
+                    </div>
+                    <div className="text-left">
+                      <div className="text-sm font-bold">{token.symbol}</div>
+                      <div className="text-xs text-slate-400">{token.name}</div>
+                    </div>
+                  </div>
+                  <Icon name="arrow_forward" className="text-slate-300" />
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <div className="text-center text-sm text-slate-400 py-8">
+                  No tokens found
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -688,6 +839,7 @@ function InputGroup({
   placeholder,
   ticker,
   balance,
+  readOnly,
 }: {
   label: string;
   value: string;
@@ -695,6 +847,7 @@ function InputGroup({
   placeholder: string;
   ticker: string;
   balance?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -713,6 +866,7 @@ function InputGroup({
           type="number"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          readOnly={readOnly}
           className="w-full bg-white border-2 border-slate-100 rounded-2xl p-4 text-2xl font-bold focus:border-[var(--secondary)] focus:ring-0 transition-all outline-none text-slate-800 placeholder:text-slate-300"
           placeholder={placeholder}
         />
