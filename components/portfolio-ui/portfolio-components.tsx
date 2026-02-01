@@ -193,20 +193,21 @@ export function FaucetCard() {
 
 // --- Fund Management ---
 export function FundManagement() {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
   const [mode, setMode] = useState<"DEPOSIT" | "WITHDRAW">("DEPOSIT");
   const [step, setStep] = useState(1);
   const [amount, setAmount] = useState("");
   const [tokenSymbol, setTokenSymbol] = useState<"USDC" | "WETH">("USDC");
-  const [isProcessing, setIsProcessing] = useState(false);
-
+  
   const tokenAddress = CONTRACTS.ARBITRUM_SEPOLIA[tokenSymbol] as `0x${string}`;
   const vaultAddress = CONTRACTS.ARBITRUM_SEPOLIA.VAULT as `0x${string}`;
 
-  const { data: hash, writeContract } = useWriteContract();
+  const { data: hash, writeContract, isPending: isWritePending, error: writeError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash,
   });
+
+  const isProcessing = isWritePending || isConfirming;
 
   // Check Allowance (Only relevant for Deposit)
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -218,54 +219,64 @@ export function FundManagement() {
 
   useEffect(() => {
     if (isConfirmed) {
-      setIsProcessing(false);
       if (mode === "DEPOSIT") {
         refetchAllowance();
+        // Auto-advance logic
         if (step === 2) setStep(3);
         if (step === 3) {
           setAmount("");
           setStep(1);
         }
       } else {
-        // Withdraw complete
         setAmount("");
       }
     }
   }, [isConfirmed, step, mode, refetchAllowance]);
 
+  const validateChain = () => {
+      if (chainId !== 421614) {
+          alert("Please switch to Arbitrum Sepolia");
+          return false;
+      }
+      return true;
+  }
+
   const handleApprove = () => {
-    if (!amount) return;
-    setIsProcessing(true);
+    if (!amount || !validateChain()) return;
     setStep(2);
-    writeContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: "approve",
-      args: [vaultAddress, parseUnits(amount, 18)],
-    });
+    try {
+        writeContract({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: "approve",
+            args: [vaultAddress, parseUnits(amount, 18)],
+        });
+    } catch (e) { console.error(e); }
   };
 
   const handleDeposit = () => {
-    if (!amount) return;
-    setIsProcessing(true);
+    if (!amount || !validateChain()) return;
     setStep(3);
-    writeContract({
-      address: vaultAddress,
-      abi: VAULT_ABI,
-      functionName: "deposit",
-      args: [tokenAddress, parseUnits(amount, 18)],
-    });
+    try {
+        writeContract({
+            address: vaultAddress,
+            abi: VAULT_ABI,
+            functionName: "deposit",
+            args: [tokenAddress, parseUnits(amount, 18)],
+        });
+    } catch (e) { console.error(e); }
   };
 
   const handleWithdraw = () => {
-    if (!amount) return;
-    setIsProcessing(true);
-    writeContract({
-      address: vaultAddress,
-      abi: VAULT_ABI,
-      functionName: "withdraw",
-      args: [tokenAddress, parseUnits(amount, 18)],
-    });
+    if (!amount || !validateChain()) return;
+    try {
+        writeContract({
+            address: vaultAddress,
+            abi: VAULT_ABI,
+            functionName: "withdraw",
+            args: [tokenAddress, parseUnits(amount, 18)],
+        });
+    } catch (e) { console.error(e); }
   };
 
   const parsedAmount = amount ? parseUnits(amount, 18) : BigInt(0);
@@ -286,6 +297,12 @@ export function FundManagement() {
           <h2 className="text-xl font-bold">Manage Funds</h2>
         </div>
       </div>
+
+      {writeError && (
+        <div className="mb-4 p-3 bg-red-100 text-red-600 text-xs rounded-xl break-all">
+            Error: {writeError.message.slice(0, 100)}...
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-8">
@@ -378,17 +395,17 @@ export function FundManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleApprove}
-                disabled={isProcessing || isConfirming || !amount}
+                disabled={isProcessing || !amount}
                 className={clsx(
                 "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
-                !amount || isProcessing || isConfirming
+                !amount || isProcessing
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                     : "bg-[var(--primary)] text-white shadow-[var(--primary)]/20 hover:shadow-[var(--primary)]/40"
                 )}
             >
-                {isProcessing || isConfirming ? (
+                {isProcessing ? (
                 <>
-                    <Icon name="sync" className="animate-spin" /> Approving...
+                    <Icon name="sync" className="animate-spin" /> Processing...
                 </>
                 ) : (
                 "APPROVE TOKEN"
@@ -399,17 +416,17 @@ export function FundManagement() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleDeposit}
-                disabled={isProcessing || isConfirming || !amount}
+                disabled={isProcessing || !amount}
                 className={clsx(
                     "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
-                    !amount || isProcessing || isConfirming
+                    !amount || isProcessing
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                     : "bg-[var(--secondary)] text-slate-900 shadow-[var(--secondary)]/20 hover:shadow-[var(--secondary)]/40"
                 )}
                 >
-                {isProcessing || isConfirming ? (
+                {isProcessing ? (
                     <>
-                    <Icon name="sync" className="animate-spin" /> Depositing...
+                    <Icon name="sync" className="animate-spin" /> Processing...
                     </>
                 ) : (
                     "DEPOSIT TO VAULT"
@@ -421,17 +438,17 @@ export function FundManagement() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleWithdraw}
-            disabled={isProcessing || isConfirming || !amount}
+            disabled={isProcessing || !amount}
             className={clsx(
                 "w-full py-4 rounded-2xl font-extrabold shadow-xl flex items-center justify-center gap-2 transition-all",
-                !amount || isProcessing || isConfirming
+                !amount || isProcessing
                 ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                 : "bg-red-500 text-white shadow-red-500/20 hover:shadow-red-500/40"
             )}
             >
-            {isProcessing || isConfirming ? (
+            {isProcessing ? (
                 <>
-                <Icon name="sync" className="animate-spin" /> Withdrawing...
+                <Icon name="sync" className="animate-spin" /> Processing...
                 </>
             ) : (
                 "WITHDRAW FUNDS"
