@@ -8,16 +8,26 @@ import {
   useAccount,
   useReadContract,
   useReadContracts,
+  useWriteContract,
+  useWaitForTransactionReceipt,
   useSwitchChain,
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { formatUnits, parseUnits } from "viem";
+import { createPublicClient, formatUnits, http, parseUnits } from "viem";
+import { arbitrumSepolia } from "viem/chains";
+import { IExecDataProtector } from "@iexec/dataprotector";
 import { CONTRACTS, ORACLE_ABI, VAULT_ABI, ERC20_ABI } from "@/constants";
 import { AVAILABLE_TOKENS } from "@/components/portfolio-ui/portfolio-components";
 
 // --- Types ---
 type OrderSide = "BUY" | "SELL";
 type OrderStatus = "IDLE" | "ENCRYPTING" | "SENDING" | "SUCCESS";
+
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 interface Order {
   id: string;
@@ -35,6 +45,32 @@ const Icon = ({ name, className }: { name: string; className?: string }) => (
     {name}
   </span>
 );
+
+async function ensureChain(chainId: string, params: any) {
+  if (!window.ethereum) return false;
+
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId }],
+    });
+    return true;
+  } catch (switchError: any) {
+    if (switchError.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [params],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
 
 // --- Navbar Component ---
 export function Navbar() {
@@ -336,6 +372,7 @@ export function TradingPanel({
   const [amount, setAmount] = useState("");
   const [price, setPrice] = useState("2450.00");
   const [status, setStatus] = useState<OrderStatus>("IDLE");
+  const [iexecStatus, setIexecStatus] = useState<string | null>(null);
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
   const [priceLoading, setPriceLoading] = useState(true);
@@ -343,6 +380,27 @@ export function TradingPanel({
     open: boolean;
     type: "pay" | "receive";
   }>({ open: false, type: "pay" });
+  const {
+    data: settleHash,
+    writeContract: writeSettlement,
+    isPending: isSettlementPending,
+    error: settleError,
+    reset: resetSettlement,
+  } = useWriteContract();
+  const { isLoading: isSettling, isSuccess: isSettled } =
+    useWaitForTransactionReceipt({
+      hash: settleHash,
+    });
+
+  useEffect(() => {
+    if (isSettled) {
+      setStatus("SUCCESS");
+      setTimeout(() => {
+        setStatus("IDLE");
+        setAmount("");
+      }, 1500);
+    }
+  }, [isSettled]);
 
   const oracleAddress = CONTRACTS.ARBITRUM_SEPOLIA.ORACLE as `0x${string}`;
   const oracleContracts = useMemo(
@@ -444,8 +502,19 @@ export function TradingPanel({
       return;
     }
 
+    const arbChainId = "0x66eee";
+    const arbParams = {
+      chainId: arbChainId,
+      chainName: "Arbitrum Sepolia",
+      nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc"],
+      blockExplorerUrls: ["https://sepolia.arbiscan.io"],
+    };
+
     try {
       setStatus("ENCRYPTING");
+      setIexecStatus(null);
+      resetSettlement();
       
       // Calculate Amounts (Simplified for Demo)
       // BUY/SELL are UI semantics. The actual trade uses the selected tokens.
@@ -477,26 +546,126 @@ export function TradingPanel({
       };
 
       // Initialize iExec Data Protector
-      // @ts-ignore - window.ethereum is not typed by default
       if (typeof window === "undefined" || !window.ethereum) {
         throw new Error("No wallet provider found");
       }
+
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const active = accounts?.[0];
+      if (address && active && active.toLowerCase() !== address.toLowerCase()) {
+        throw new Error(
+          `Wallet mismatch. Please switch MetaMask to ${address} and retry.`
+        );
+      }
+
+      const switched = await ensureChain(arbChainId, arbParams);
+      if (!switched) {
+        throw new Error("Failed to switch to Arbitrum Sepolia");
+      }
+
+      const feeClient = createPublicClient({
+        chain: arbitrumSepolia,
+        transport: http("https://sepolia-rollup.arbitrum.io/rpc"),
+      });
+
+      const provider = {
+        ...window.ethereum,
+        request: async (args: { method: string; params?: any[] }) => {
+          if (args.method === "eth_sendTransaction" && args.params?.[0]) {
+            try {
+              const fees = await feeClient.estimateFeesPerGas();
+              const tx = { ...args.params[0] };
+              const toHex = (v: bigint) => `0x${v.toString(16)}`;
+              if (!tx.maxFeePerGas && fees.maxFeePerGas) {
+                tx.maxFeePerGas = toHex(fees.maxFeePerGas);
+              }
+              if (!tx.maxPriorityFeePerGas && fees.maxPriorityFeePerGas) {
+                tx.maxPriorityFeePerGas = toHex(fees.maxPriorityFeePerGas);
+              }
+              return window.ethereum.request({
+                method: args.method,
+                params: [tx],
+              });
+            } catch {
+              return window.ethereum.request(args as any);
+            }
+          }
+          return window.ethereum.request(args as any);
+        },
+      };
+
+      const dataProtector = new IExecDataProtector(provider as any, {
+        allowExperimentalNetworks: true,
+      });
       
-      // @ts-ignore
-      const dataProtector = new IExecDataProtector(window.ethereum);
-      
-      const protectedData = await dataProtector.protectData({
+      const protectedData = await dataProtector.core.protectData({
         data: { order: JSON.stringify(orderData) },
         name: `Opaque Order ${orderData.id}`,
       });
 
       console.log("Protected Data Address:", protectedData.address);
 
+      await dataProtector.core.grantAccess({
+        protectedData: protectedData.address,
+        authorizedApp: CONTRACTS.IEXEC.IAPP_ADDRESS,
+        authorizedUser: address,
+      });
+
+      setIexecStatus("Submitting iApp run on backend...");
+
+      const runRes = await fetch("/api/iexec/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ protectedDataAddress: protectedData.address }),
+      });
+
+      const runPayload = await runRes.json();
+      if (!runRes.ok) {
+        throw new Error(runPayload?.error || "iApp run failed");
+      }
+
+      setIexecStatus("Reading iExec result...");
+
+      if (!runPayload?.task || !runPayload?.deal) {
+        throw new Error("iApp run did not return task/deal id");
+      }
+
+      await dataProtector.core.waitForTaskCompletion({
+        taskId: runPayload.task,
+        dealId: runPayload.deal,
+      });
+
+      const resultBuffer = await dataProtector.core.getResultFromCompletedTask({
+        taskId: runPayload.task,
+        path: "result.json",
+      });
+
+      const decoded = new TextDecoder().decode(
+        new Uint8Array(resultBuffer as unknown as ArrayBuffer)
+      );
+      const parsed = JSON.parse(decoded);
+
+      if (!parsed?.trades || !Array.isArray(parsed.trades)) {
+        throw new Error("Invalid iExec result format");
+      }
+
+      if (parsed.trades.length === 0) {
+        setStatus("SUCCESS");
+        alert("No matching orders yet. Try a second order from another wallet.");
+        return;
+      }
+
       setStatus("SENDING");
-      // Simulate sending to OrderBook / iExec Task
-      await new Promise((r) => setTimeout(r, 1000));
-      
-      setStatus("SUCCESS");
+
+      writeSettlement({
+        address: vaultAddress,
+        abi: VAULT_ABI,
+        functionName: "settleBatch",
+        args: [parsed.trades, parsed.signature],
+      });
+
 
       // Add Order to Table (Visual only for now)
       onPlaceOrder({
@@ -509,14 +678,10 @@ export function TradingPanel({
         timestamp: new Date(),
       });
 
-      // Reset
-      setTimeout(() => {
-        setStatus("IDLE");
-        setAmount("");
-      }, 2000);
-
     } catch (e) {
       console.error(e);
+      const details = JSON.stringify(e, Object.getOwnPropertyNames(e));
+      setIexecStatus(details);
       setStatus("IDLE");
       alert("Encryption Failed: " + (e as Error).message);
     }
@@ -581,6 +746,11 @@ export function TradingPanel({
 
         {/* Inputs */}
         <div className="space-y-6">
+          {iexecStatus && (
+            <div className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-xs font-semibold text-slate-500">
+              iExec: {iexecStatus}
+            </div>
+          )}
           <InputGroup
             label="You Pay (Dark Pool)"
             value={amount}
@@ -652,7 +822,7 @@ export function TradingPanel({
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleTrade}
-              disabled={status !== "IDLE" || !amount}
+              disabled={status !== "IDLE" || !amount || isSettlementPending || isSettling}
               className={clsx(
                 "w-full py-5 rounded-2xl text-lg font-extrabold shadow-xl flex items-center justify-center gap-3 transition-all",
                 side === "BUY" 
@@ -672,6 +842,18 @@ export function TradingPanel({
                   >
                     <Icon name="lock_open" className="text-2xl" />
                     ENCRYPT & PLACE ORDER
+                  </motion.div>
+                )}
+                {(isSettlementPending || isSettling) && (
+                  <motion.div
+                    key="settling"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="flex items-center gap-2"
+                  >
+                    <Icon name="pending" className="animate-spin text-2xl" />
+                    Settling on Arbitrum...
                   </motion.div>
                 )}
                 {status === "ENCRYPTING" && (
@@ -1093,18 +1275,18 @@ function InputGroup({
           </span>
         )}
       </div>
-      <div className="relative">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          readOnly={readOnly}
-          className={clsx(
-            "w-full bg-white border-2 rounded-2xl p-4 text-2xl font-bold focus:border-[var(--secondary)] focus:ring-0 transition-all outline-none text-slate-800 placeholder:text-slate-300",
-            loading ? "border-slate-200 animate-pulse" : "border-slate-100"
-          )}
-          placeholder={placeholder}
-        />
+        <div className="relative">
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            readOnly={readOnly}
+            className={clsx(
+              "w-full bg-white border-2 rounded-2xl p-4 text-2xl font-bold focus:border-[var(--secondary)] focus:ring-0 transition-all outline-none text-slate-800 placeholder:text-slate-300",
+              loading ? "border-slate-200 animate-pulse" : "border-slate-100"
+            )}
+            placeholder={placeholder}
+          />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm bg-slate-50 px-2 py-1 rounded-lg pointer-events-none">
           {ticker}
         </div>
