@@ -97,6 +97,21 @@ export async function POST(request: Request) {
       requestorder,
     });
 
+    const waitDeal = async () => {
+      const attempts = 30;
+      for (let i = 0; i < attempts; i += 1) {
+        try {
+          await iexec.deal.show(dealid);
+          return;
+        } catch {
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+      throw new Error("Deal not found after retries");
+    };
+
+    await waitDeal();
+
     const taskId = await iexec.deal.computeTaskId(dealid, 0);
 
     return NextResponse.json({ deal: dealid, task: taskId, txHash });

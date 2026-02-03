@@ -374,6 +374,8 @@ export function TradingPanel({
   const [status, setStatus] = useState<OrderStatus>("IDLE");
   const [iexecStatus, setIexecStatus] = useState<string | null>(null);
   const [backendRequester, setBackendRequester] = useState<string | null>(null);
+  const [isStaking, setIsStaking] = useState(false);
+  const [stakeInfo, setStakeInfo] = useState<{ stake: string; locked: string } | null>(null);
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
   const [priceLoading, setPriceLoading] = useState(true);
@@ -473,6 +475,14 @@ export function TradingPanel({
       active = false;
     };
   }, []);
+
+  const refreshStake = async () => {
+    const res = await fetch("/api/iexec/balance");
+    const data = await res.json();
+    if (res.ok && data?.stake && data?.locked) {
+      setStakeInfo({ stake: data.stake, locked: data.locked });
+    }
+  };
 
   const handlePayTokenSelect = (token: (typeof AVAILABLE_TOKENS)[number]) => {
     setPayToken(token);
@@ -649,20 +659,66 @@ export function TradingPanel({
         throw new Error("iApp run did not return task/deal id");
       }
 
-      await dataProtector.core.waitForTaskCompletion({
-        taskId: runPayload.task,
-        dealId: runPayload.deal,
-      });
+      const waitWithRetry = async () => {
+        const attempts = 30;
+        for (let i = 0; i < attempts; i += 1) {
+          try {
+            await dataProtector.core.waitForTaskCompletion({
+              taskId: runPayload.task,
+              dealId: runPayload.deal,
+            });
+            return;
+          } catch (err: any) {
+            const msg = err?.message || "";
+            if (msg.includes("No deal found")) {
+              setIexecStatus(`Waiting for deal... (${i + 1}/${attempts})`);
+              await new Promise((r) => setTimeout(r, 3000));
+              continue;
+            }
+            throw err;
+          }
+        }
+        throw new Error("Timed out waiting for deal");
+      };
 
-      const resultBuffer = await dataProtector.core.getResultFromCompletedTask({
-        taskId: runPayload.task,
-        path: "result.json",
-      });
+      await waitWithRetry();
 
-      const decoded = new TextDecoder().decode(
-        new Uint8Array(resultBuffer as unknown as ArrayBuffer)
-      );
-      const parsed = JSON.parse(decoded);
+      const fetchResultWithRetry = async () => {
+        const attempts = 10;
+        for (let i = 0; i < attempts; i += 1) {
+          try {
+            const resultBuffer =
+              await dataProtector.core.getResultFromCompletedTask({
+                taskId: runPayload.task,
+                path: "result.json",
+              });
+
+            const decoded = new TextDecoder().decode(
+              new Uint8Array(resultBuffer as unknown as ArrayBuffer)
+            );
+
+            if (!decoded || decoded.trim().length < 2) {
+              setIexecStatus(`Waiting for result... (${i + 1}/${attempts})`);
+              await new Promise((r) => setTimeout(r, 3000));
+              continue;
+            }
+
+            console.log("iExec result raw:", decoded);
+            return JSON.parse(decoded);
+          } catch (err: any) {
+            const msg = err?.message || "";
+            if (msg.includes("Unexpected end of JSON input")) {
+              setIexecStatus(`Parsing result... (${i + 1}/${attempts})`);
+              await new Promise((r) => setTimeout(r, 3000));
+              continue;
+            }
+            throw err;
+          }
+        }
+        throw new Error("Timed out waiting for result");
+      };
+
+      const parsed = await fetchResultWithRetry();
 
       if (!parsed?.trades || !Array.isArray(parsed.trades)) {
         throw new Error("Invalid iExec result format");
@@ -695,12 +751,32 @@ export function TradingPanel({
         timestamp: new Date(),
       });
 
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       const details = JSON.stringify(e, Object.getOwnPropertyNames(e));
       setIexecStatus(details);
       setStatus("IDLE");
       alert("Encryption Failed: " + (e as Error).message);
+    }
+  };
+
+  const handleStake = async () => {
+    try {
+      setIsStaking(true);
+      const res = await fetch("/api/iexec/stake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amountNrlc: 200000000 }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Stake failed");
+      alert("Stake submitted. Please wait for confirmation.");
+      await refreshStake();
+    } catch (err: any) {
+      alert(err.message || "Stake failed");
+    } finally {
+      setIsStaking(false);
     }
   };
 
@@ -766,6 +842,19 @@ export function TradingPanel({
           {iexecStatus && (
             <div className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-xs font-semibold text-slate-500">
               iExec: {iexecStatus}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleStake}
+            disabled={isStaking}
+            className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50"
+          >
+            {isStaking ? "Staking RLC..." : "Stake 0.2 RLC for iExec"}
+          </button>
+          {stakeInfo && (
+            <div className="text-[11px] font-semibold text-slate-400">
+              Stake: {stakeInfo.stake} nRLC · Locked: {stakeInfo.locked} nRLC
             </div>
           )}
           <InputGroup
