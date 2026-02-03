@@ -373,6 +373,7 @@ export function TradingPanel({
   const [price, setPrice] = useState("2450.00");
   const [status, setStatus] = useState<OrderStatus>("IDLE");
   const [iexecStatus, setIexecStatus] = useState<string | null>(null);
+  const [backendRequester, setBackendRequester] = useState<string | null>(null);
   const [payToken, setPayToken] = useState(AVAILABLE_TOKENS[0]);
   const [receiveToken, setReceiveToken] = useState(AVAILABLE_TOKENS[1]);
   const [priceLoading, setPriceLoading] = useState(true);
@@ -458,6 +459,20 @@ export function TradingPanel({
     setPrice(display);
     setPriceLoading(false);
   }, [oraclePrices, payToken.symbol, receiveToken.symbol]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/iexec/wallet")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.address) setBackendRequester(data.address);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handlePayTokenSelect = (token: (typeof AVAILABLE_TOKENS)[number]) => {
     setPayToken(token);
@@ -610,7 +625,9 @@ export function TradingPanel({
       await dataProtector.core.grantAccess({
         protectedData: protectedData.address,
         authorizedApp: CONTRACTS.IEXEC.IAPP_ADDRESS,
-        authorizedUser: address,
+        authorizedUser: backendRequester || address,
+        numberOfAccess: 10,
+        pricePerAccess: 0,
       });
 
       setIexecStatus("Submitting iApp run on backend...");

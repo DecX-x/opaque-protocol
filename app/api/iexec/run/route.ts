@@ -30,10 +30,10 @@ export async function POST(request: Request) {
       { ethProvider },
       {
         allowExperimentalNetworks: true,
+        defaultTeeFramework: "scone",
         smsURL: "https://sms.arbitrum-sepolia-testnet.iex.ec",
         resultProxyURL: "https://result-proxy.arbitrum-sepolia-testnet.iex.ec",
         ipfsGatewayURL: "https://ipfs-gateway.arbitrum-sepolia-testnet.iex.ec",
-        iexecGatewayURL: "https://gateway.arbitrum-sepolia-testnet.iex.ec",
       }
     );
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const app = "0xdE4f4aC58a35Fc70Abc4AfDD7F41EA4C4fc8BB4f";
     const workerpoolOrderbook = await iexec.orderbook.fetchWorkerpoolOrderbook({
       category: 0,
-      minTag: ["tee"],
+      minTag: ["tee", "scone"],
     });
 
     const workerpoolorder = workerpoolOrderbook?.orders?.[0]?.order;
@@ -53,10 +53,26 @@ export async function POST(request: Request) {
       );
     }
 
+    const datasetOrderbook = await iexec.orderbook.fetchDatasetOrderbook({
+      dataset: protectedDataAddress,
+      app,
+      requester: await iexec.wallet.getAddress(),
+      isAppStrict: true,
+      isRequesterStrict: true,
+    });
+
+    const datasetorder = datasetOrderbook?.orders?.[0]?.order;
+    if (!datasetorder) {
+      return NextResponse.json(
+        { error: "No dataset order available for protected data" },
+        { status: 500 }
+      );
+    }
+
     const apporderTemplate = await iexec.order.createApporder({
       app,
       appprice: 0,
-      tag: ["tee"],
+      tag: ["tee", "scone"],
       workerpoolrestrict: workerpoolorder.workerpool,
     });
     const apporder = await iexec.order.signApporder(apporderTemplate, {
@@ -69,13 +85,14 @@ export async function POST(request: Request) {
       dataset: protectedDataAddress,
       params: "",
       appmaxprice: 0,
-      datasetmaxprice: 0,
+      datasetmaxprice: datasetorder.datasetprice,
       workerpoolmaxprice: workerpoolorder.workerpoolprice || 10,
     });
     const requestorder = await iexec.order.signRequestorder(requestorderTemplate);
 
     const { dealid, txHash } = await iexec.order.matchOrders({
       apporder,
+      datasetorder,
       workerpoolorder,
       requestorder,
     });
