@@ -742,8 +742,8 @@ export function TradingPanel({
       }
 
       if (parsed.trades.length === 0) {
-        setStatus("SUCCESS");
-        alert("No matching orders yet. Try a second order from another wallet.");
+        setStatus("IDLE");
+        alert("Trade execution failed. The TEE could not process the order.");
         return;
       }
 

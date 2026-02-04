@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { IExec, IExecConfig, utils } from "iexec";
 import { JsonRpcProvider } from "ethers";
+import { CONTRACTS } from "@/constants";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { protectedDataAddress } = body || {};
+    const { protectedDataAddress, orderJson } = body || {};
 
-    if (!protectedDataAddress) {
+    // For reserve model, we can pass order data directly as args
+    // or still use protected data for privacy
+    if (!protectedDataAddress && !orderJson) {
       return NextResponse.json(
-        { error: "Missing protectedDataAddress" },
+        { error: "Missing protectedDataAddress or orderJson" },
         { status: 400 }
       );
     }
@@ -40,7 +43,9 @@ export async function POST(request: Request) {
 
     const iexec = IExec.fromConfig(config);
 
-    const app = "0x1c970422b7DC383DBa58eB03D33b4e3Cc14Af8f4";
+    const app = CONTRACTS.IEXEC.IAPP_ADDRESS;
+    const reserveAddress = CONTRACTS.ARBITRUM_SEPOLIA.RESERVE;
+
     const workerpoolOrderbook = await iexec.orderbook.fetchWorkerpoolOrderbook({
       category: 0,
       minTag: ["tee", "scone"],
@@ -54,20 +59,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const datasetOrderbook = await iexec.orderbook.fetchDatasetOrderbook({
-      dataset: protectedDataAddress,
-      app,
-      requester: await iexec.wallet.getAddress(),
-      isAppStrict: true,
-      isRequesterStrict: true,
-    });
+    // Build args: first arg is reserve address, then order JSON
+    // Format: "RESERVE_ADDRESS ORDER_JSON"
+    let iexecArgs = reserveAddress;
+    if (orderJson) {
+      iexecArgs = `${reserveAddress} ${JSON.stringify(orderJson)}`;
+    }
 
-    const datasetorder = datasetOrderbook?.orders?.[0]?.order;
-    if (!datasetorder) {
-      return NextResponse.json(
-        { error: "No dataset order available for protected data" },
-        { status: 500 }
-      );
+    let datasetorder = null;
+    if (protectedDataAddress) {
+      const datasetOrderbook = await iexec.orderbook.fetchDatasetOrderbook({
+        dataset: protectedDataAddress,
+        app,
+        requester: await iexec.wallet.getAddress(),
+        isAppStrict: true,
+        isRequesterStrict: true,
+      });
+
+      datasetorder = datasetOrderbook?.orders?.[0]?.order;
+      if (!datasetorder) {
+        return NextResponse.json(
+          { error: "No dataset order available for protected data" },
+          { status: 500 }
+        );
+      }
     }
 
     const apporderTemplate = await iexec.order.createApporder({
@@ -83,20 +98,27 @@ export async function POST(request: Request) {
     const requestorderTemplate = await iexec.order.createRequestorder({
       app,
       category: 0,
-      dataset: protectedDataAddress,
-      params: "",
+      dataset: protectedDataAddress || "0x0000000000000000000000000000000000000000",
+      params: {
+        iexec_args: iexecArgs,
+      },
       appmaxprice: 0,
-      datasetmaxprice: datasetorder.datasetprice,
+      datasetmaxprice: datasetorder?.datasetprice || 0,
       workerpoolmaxprice: workerpoolorder.workerpoolprice || 10,
     });
     const requestorder = await iexec.order.signRequestorder(requestorderTemplate);
 
-    const { dealid, txHash } = await iexec.order.matchOrders({
+    const matchOrdersParams: any = {
       apporder,
-      datasetorder,
       workerpoolorder,
       requestorder,
-    });
+    };
+    
+    if (datasetorder) {
+      matchOrdersParams.datasetorder = datasetorder;
+    }
+
+    const { dealid, txHash } = await iexec.order.matchOrders(matchOrdersParams);
 
     const rpcProvider = new JsonRpcProvider(
       "https://sepolia-rollup.arbitrum.io/rpc"
