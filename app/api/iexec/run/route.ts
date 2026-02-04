@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { IExec, IExecConfig, utils } from "iexec";
+import { JsonRpcProvider } from "ethers";
 
 export async function POST(request: Request) {
   try {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
     const iexec = IExec.fromConfig(config);
 
-    const app = "0xdE4f4aC58a35Fc70Abc4AfDD7F41EA4C4fc8BB4f";
+    const app = "0x1c970422b7DC383DBa58eB03D33b4e3Cc14Af8f4";
     const workerpoolOrderbook = await iexec.orderbook.fetchWorkerpoolOrderbook({
       category: 0,
       minTag: ["tee", "scone"],
@@ -97,8 +98,16 @@ export async function POST(request: Request) {
       requestorder,
     });
 
+    const rpcProvider = new JsonRpcProvider(
+      "https://sepolia-rollup.arbitrum.io/rpc"
+    );
+    const receipt = await rpcProvider.waitForTransaction(txHash, 1, 120000);
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`matchOrders tx failed: ${txHash}`);
+    }
+
     const waitDeal = async () => {
-      const attempts = 30;
+      const attempts = 40;
       for (let i = 0; i < attempts; i += 1) {
         try {
           await iexec.deal.show(dealid);

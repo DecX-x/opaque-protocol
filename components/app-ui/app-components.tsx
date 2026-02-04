@@ -653,6 +653,12 @@ export function TradingPanel({
         throw new Error(runPayload?.error || "iApp run failed");
       }
 
+      if (runPayload?.txHash || runPayload?.deal) {
+        setIexecStatus(
+          `Matched orders. tx: ${runPayload?.txHash || ""} deal: ${runPayload?.deal || ""}`
+        );
+      }
+
       setIexecStatus("Reading iExec result...");
 
       if (!runPayload?.task || !runPayload?.deal) {
@@ -660,9 +666,10 @@ export function TradingPanel({
       }
 
       const waitWithRetry = async () => {
-        const attempts = 30;
+        const attempts = 60;
         for (let i = 0; i < attempts; i += 1) {
           try {
+            setIexecStatus(`Waiting for TEE task... (${i + 1}/${attempts})`);
             await dataProtector.core.waitForTaskCompletion({
               taskId: runPayload.task,
               dealId: runPayload.deal,
@@ -670,9 +677,13 @@ export function TradingPanel({
             return;
           } catch (err: any) {
             const msg = err?.message || "";
-            if (msg.includes("No deal found")) {
-              setIexecStatus(`Waiting for deal... (${i + 1}/${attempts})`);
-              await new Promise((r) => setTimeout(r, 3000));
+            const causeMsg = err?.cause?.message || "";
+            const fullError = msg + " " + causeMsg;
+            
+            // Retry on "No deal found" or "Failed to wait" errors
+            if (fullError.includes("No deal found") || fullError.includes("Failed to wait for task")) {
+              setIexecStatus(`Waiting for deal to propagate... (${i + 1}/${attempts})`);
+              await new Promise((r) => setTimeout(r, 5000));
               continue;
             }
             throw err;
@@ -684,18 +695,24 @@ export function TradingPanel({
       await waitWithRetry();
 
       const fetchResultWithRetry = async () => {
-        const attempts = 10;
+        const attempts = 15;
         for (let i = 0; i < attempts; i += 1) {
           try {
-            const resultBuffer =
+            const response =
               await dataProtector.core.getResultFromCompletedTask({
                 taskId: runPayload.task,
                 path: "result.json",
               });
 
-            const decoded = new TextDecoder().decode(
-              new Uint8Array(resultBuffer as unknown as ArrayBuffer)
-            );
+            // Handle both { result: ArrayBuffer } and direct ArrayBuffer formats
+            let buffer: ArrayBuffer;
+            if (response && typeof response === "object" && "result" in response) {
+              buffer = (response as { result: ArrayBuffer }).result;
+            } else {
+              buffer = response as unknown as ArrayBuffer;
+            }
+
+            const decoded = new TextDecoder().decode(new Uint8Array(buffer));
 
             if (!decoded || decoded.trim().length < 2) {
               setIexecStatus(`Waiting for result... (${i + 1}/${attempts})`);
@@ -707,7 +724,7 @@ export function TradingPanel({
             return JSON.parse(decoded);
           } catch (err: any) {
             const msg = err?.message || "";
-            if (msg.includes("Unexpected end of JSON input")) {
+            if (msg.includes("Unexpected end of JSON input") || msg.includes("No deal found")) {
               setIexecStatus(`Parsing result... (${i + 1}/${attempts})`);
               await new Promise((r) => setTimeout(r, 3000));
               continue;
